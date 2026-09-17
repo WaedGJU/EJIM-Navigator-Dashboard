@@ -1,0 +1,44 @@
+import streamlit as st
+import plotly.express as px
+
+from utils.auth import login_gate
+from utils.style import inject_base_style, sidebar_user_box, COLORS
+from utils.sheets import load_activities
+from utils.compute import enrich
+
+st.set_page_config(page_title="External Partners", page_icon="🤝", layout="wide")
+inject_base_style()
+login_gate()
+sidebar_user_box()
+
+st.title("MODEE / GIZ / MoL")
+st.caption("Every activity naming an external partner as an owner, co-owner, or dependency.")
+
+df = enrich(load_activities())
+if df.empty:
+    st.stop()
+
+external = df[df["is_external"]].copy()
+
+partner_filter = st.radio("Filter by partner", ["All", "MODEE", "GIZ", "MoL"], horizontal=True)
+if partner_filter != "All":
+    external = external[external["partners"].apply(lambda p: partner_filter in p)]
+
+counts = {p: int(df["partners"].apply(lambda x: p in x).sum()) for p in ["MODEE", "GIZ", "MoL"]}
+c1, c2, c3 = st.columns(3)
+c1.metric("MODEE", counts["MODEE"])
+c2.metric("GIZ", counts["GIZ"])
+c3.metric("MoL", counts["MoL"])
+
+fig = px.bar(external, x="Original WP", color="Bucket",
+             color_discrete_map={
+                 "Completed": COLORS["good"], "In Progress": COLORS["blue"],
+                 "Needs Confirmation": COLORS["warning"], "Not Started": "#c7cbd1",
+             })
+fig.update_layout(height=320, legend_title="")
+st.plotly_chart(fig, use_container_width=True)
+
+st.dataframe(
+    external[["No.", "Original WP", "Activity", "Responsible (Name)", "Status", "End Date"]],
+    use_container_width=True, hide_index=True,
+)
