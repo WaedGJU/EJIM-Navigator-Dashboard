@@ -30,12 +30,25 @@ c1.metric("MODEE", counts["MODEE"])
 c2.metric("GIZ", counts["GIZ"])
 c3.metric("MoL", counts["MoL"])
 
-fig = px.bar(external, x="Original WP", color="Bucket",
-             color_discrete_map={
-                 "Completed": COLORS["good"], "In Progress": COLORS["blue"],
-                 "Needs Confirmation": COLORS["warning"], "Not Started": "#c7cbd1",
-             })
-fig.update_layout(height=320, legend_title="")
+wp_pct = (
+    external.groupby("Original WP")["Bucket"]
+    .value_counts(normalize=True)
+    .mul(100)
+    .round(1)
+    .rename("pct")
+    .reset_index()
+)
+fig = px.bar(
+    wp_pct, x="Original WP", y="pct", color="Bucket",
+    text=wp_pct["pct"].apply(lambda v: f"{v:.0f}%" if v >= 6 else ""),
+    color_discrete_map={
+        "Completed": COLORS["good"], "In Progress": COLORS["blue"],
+        "Needs Confirmation": COLORS["warning"], "Not Started": COLORS["neutral"],
+    },
+    labels={"pct": "% of activities", "Original WP": ""},
+)
+fig.update_traces(textposition="inside", insidetextanchor="middle")
+fig.update_layout(barmode="stack", height=320, legend_title="")
 st.plotly_chart(fig, use_container_width=True)
 
 st.dataframe(

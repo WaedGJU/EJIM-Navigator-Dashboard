@@ -32,8 +32,9 @@ for wp in picked:
                      color="Bucket",
                      color_discrete_map={
                          "Completed": COLORS["good"], "In Progress": COLORS["blue"],
-                         "Needs Confirmation": COLORS["warning"], "Not Started": "#c7cbd1",
+                         "Needs Confirmation": COLORS["warning"], "Not Started": COLORS["neutral"],
                      })
+        fig.update_traces(textposition="inside", textinfo="percent+label")
         fig.update_layout(height=260, margin=dict(l=0, r=0, t=0, b=0))
         c1, c2 = st.columns([1, 2])
         with c1:

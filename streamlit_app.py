@@ -1,3 +1,5 @@
+import datetime
+
 import streamlit as st
 import plotly.express as px
 import pandas as pd
@@ -10,7 +12,7 @@ from utils.compute import enrich, kpis
 st.set_page_config(page_title="Navigator (MASAR) — Overview", page_icon="🧭", layout="wide")
 inject_base_style()
 login_gate()  # stops here if nobody is logged in
-sidebar_user_box()
+sidebar_user_box()  # the one fixed logo/header for the whole app — never repeated on the page itself
 
 st.title("Project Overview")
 st.caption("Labour Mobility Navigator (MASAR) status dashboard — live data from Google Sheets")
@@ -23,6 +25,12 @@ if df.empty:
     st.stop()
 
 k = kpis(df)
+STATUS_COLORS = {
+    "Completed": COLORS["good"],
+    "In Progress": COLORS["progress"],
+    "Needs Confirmation": COLORS["warning"],
+    "Not Started": COLORS["neutral"],
+}
 
 # ---------- KPI cards ----------
 c1, c2, c3, c4, c5, c6, c7, c8 = st.columns(8)
@@ -37,6 +45,40 @@ c8.metric("No owner", k["unassigned"])
 
 st.divider()
 
+# ---------- Work-package cards with progress bars ----------
+st.subheader("Work packages")
+wp_list = sorted(df["Original WP"].dropna().unique())
+cols = st.columns(3)
+for i, wp in enumerate(wp_list):
+    sub = df[df["Original WP"] == wp]
+    total = len(sub)
+    done = int((sub["Bucket"] == "Completed").sum())
+    pct = round(100 * done / total, 1) if total else 0
+    delayed = int(sub["is_overdue"].sum())
+    at_risk = int(sub["is_atrisk"].sum())
+    with cols[i % 3]:
+        badges = ""
+        if delayed:
+            badges += f'<span class="nav-pill" style="background:#fbe7e7;color:{COLORS["critical"]};margin-right:6px;">{delayed} delayed</span>'
+        if at_risk:
+            badges += f'<span class="nav-pill" style="background:#fdeed2;color:{COLORS["warning"]};">{at_risk} at risk</span>'
+        st.markdown(
+            f"""
+            <div class="nav-card" style="margin-bottom:14px;">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                <div style="font-weight:800;color:{COLORS['navy']};font-size:15px;">{wp}</div>
+                <div style="font-weight:800;color:{COLORS['teal']};font-size:15px;">{pct}%</div>
+              </div>
+              <div class="nav-progress-track"><div class="nav-progress-fill" style="width:{pct}%;"></div></div>
+              <div style="margin-top:8px;font-size:12px;color:{COLORS['ink']};">{done}/{total} completed</div>
+              <div style="margin-top:6px;">{badges or '&nbsp;'}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+st.divider()
+
 col_left, col_right = st.columns([1.4, 1])
 
 with col_left:
@@ -45,6 +87,7 @@ with col_left:
         df.groupby("Original WP")["Bucket"]
         .value_counts(normalize=True)
         .mul(100)
+        .round(1)
         .rename("pct")
         .reset_index()
     )
@@ -54,14 +97,11 @@ with col_left:
         y="Original WP",
         color="Bucket",
         orientation="h",
-        color_discrete_map={
-            "Completed": COLORS["good"],
-            "In Progress": COLORS["blue"],
-            "Needs Confirmation": COLORS["warning"],
-            "Not Started": "#c7cbd1",
-        },
+        text=wp_summary["pct"].apply(lambda v: f"{v:.0f}%" if v >= 6 else ""),
+        color_discrete_map=STATUS_COLORS,
         labels={"pct": "% of activities", "Original WP": ""},
     )
+    fig.update_traces(textposition="inside", insidetextanchor="middle")
     fig.update_layout(barmode="stack", legend_title="", height=420, margin=dict(l=0, r=0, t=10, b=0))
     st.plotly_chart(fig, use_container_width=True)
 
@@ -75,13 +115,9 @@ with col_right:
         values="Count",
         hole=0.6,
         color="Status",
-        color_discrete_map={
-            "Completed": COLORS["good"],
-            "In Progress": COLORS["blue"],
-            "Needs Confirmation": COLORS["warning"],
-            "Not Started": "#c7cbd1",
-        },
+        color_discrete_map=STATUS_COLORS,
     )
+    fig2.update_traces(textposition="inside", textinfo="percent+label")
     fig2.update_layout(height=420, showlegend=True, legend=dict(orientation="h", y=-0.15))
     st.plotly_chart(fig2, use_container_width=True)
 
@@ -97,10 +133,46 @@ team = (
     .sort_values("Completion %", ascending=False)
 )
 fig3 = px.bar(team, x="Completion %", y="Responsible (Name)", orientation="h",
-              text="Activities", color="Completion %",
+              text=team["Completion %"].apply(lambda v: f"{v:.0f}%"),
+              color="Completion %",
               color_continuous_scale=[COLORS["critical"], COLORS["warning"], COLORS["good"]])
+fig3.update_traces(textposition="outside")
 fig3.update_layout(height=380, coloraxis_showscale=False, margin=dict(l=0, r=0, t=10, b=0),
                     yaxis_title="", xaxis_title="")
 st.plotly_chart(fig3, use_container_width=True)
+
+st.divider()
+
+# ---------- This week / delayed / at-risk ----------
+today = pd.Timestamp(datetime.date.today())
+week_ahead = today + pd.Timedelta(days=7)
+this_week = df[(df["Bucket"] != "Completed") & (df["End_dt"] >= today) & (df["End_dt"] <= week_ahead)]
+delayed_df = df[df["is_overdue"]].sort_values("days_overdue", ascending=False)
+at_risk_df = df[df["is_atrisk"]]
+
+t1, t2, t3 = st.tabs([
+    f"📅 Due this week ({len(this_week)})",
+    f"🔴 Delayed ({len(delayed_df)})",
+    f"🟠 At risk ({len(at_risk_df)})",
+])
+
+
+def _mini_table(sub: pd.DataFrame, extra_col: str | None = None):
+    if sub.empty:
+        st.success("Nothing here 🎉")
+        return
+    cols = ["No.", "Original WP", "Activity", "Responsible (Name)", "Status", "End Date"]
+    if extra_col and extra_col in sub.columns:
+        cols.append(extra_col)
+    st.dataframe(sub[cols], use_container_width=True, hide_index=True)
+
+
+with t1:
+    st.caption(f"Activities due between today ({today.date()}) and {week_ahead.date()}, not yet completed.")
+    _mini_table(this_week)
+with t2:
+    _mini_table(delayed_df, "days_overdue")
+with t3:
+    _mini_table(at_risk_df)
 
 st.info("💡 Use the sidebar to jump to Work Packages, Team, Critical Follow-up, External Partners, Full Registry, or Meeting Prep.")
