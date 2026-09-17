@@ -79,39 +79,38 @@ def login_gate():
             remaining = _is_locked_out(email_clean)
             if remaining:
                 st.error(f"⛔ This account is temporarily locked after too many failed attempts. Try again in {remaining // 60 + 1} min.")
-                return
+            else:
+                users = load_users()
+                if users.empty:
+                    st.error("Could not reach the user list — check the Google Sheets connection.")
+                else:
+                    users["Email_norm"] = users["Email"].astype(str).str.strip().str.lower()
+                    match = users[users["Email_norm"] == email_clean]
 
-            users = load_users()
-            if users.empty:
-                st.error("Could not reach the user list — check the Google Sheets connection.")
-                return
+                    if match.empty or not pin:
+                        _register_failed_attempt(email_clean)
+                        append_login_log(email, "-", "failed")
+                        st.error("Incorrect email or PIN.")
+                    else:
+                        row = match.iloc[0]
+                        expected_hash = str(row["PIN_Hash"]).strip()
+                        given_hash = _hash_pin(email_clean, pin.strip())
 
-            users["Email_norm"] = users["Email"].astype(str).str.strip().str.lower()
-            match = users[users["Email_norm"] == email_clean]
+                        if given_hash != expected_hash or str(row.get("Active", "TRUE")).upper() != "TRUE":
+                            _register_failed_attempt(email_clean)
+                            append_login_log(email, row["Name"], "failed")
+                            st.error("Incorrect email or PIN.")
+                        else:
+                            _clear_failed_attempts(email_clean)
+                            st.session_state["user"] = {
+                                "name": row["Name"],
+                                "email": email_clean,
+                                "role": row["Role"],
+                            }
+                            append_login_log(email_clean, row["Name"], "success")
+                            st.rerun()
 
-            if match.empty or not pin:
-                _register_failed_attempt(email_clean)
-                append_login_log(email, "-", "failed")
-                st.error("Incorrect email or PIN.")
-                return
-
-            row = match.iloc[0]
-            expected_hash = str(row["PIN_Hash"]).strip()
-            given_hash = _hash_pin(email_clean, pin.strip())
-
-            if given_hash != expected_hash or str(row.get("Active", "TRUE")).upper() != "TRUE":
-                _register_failed_attempt(email_clean)
-                append_login_log(email, row["Name"], "failed")
-                st.error("Incorrect email or PIN.")
-                return
-
-            _clear_failed_attempts(email_clean)
-            st.session_state["user"] = {
-                "name": row["Name"],
-                "email": email_clean,
-                "role": row["Role"],
-            }
-            append_login_log(email_clean, row["Name"], "success")
-            st.rerun()
-
+    # Critical: always stop here so nothing below login_gate() in the calling
+    # page renders unless login just succeeded above (st.rerun() already
+    # restarted the script in that case, so this line is never reached then).
     st.stop()
