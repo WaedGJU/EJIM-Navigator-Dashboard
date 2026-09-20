@@ -1,5 +1,7 @@
 """Shared visual identity (MASAR brand colors, taken from the real logo) +
-shared sidebar header for every page."""
+the shared top user bar for every page. Navigation itself lives in a
+horizontal top tab bar (st.navigation(..., position="top"), wired up in
+streamlit_app.py) — there is no left sidebar anywhere in this app."""
 
 import base64
 from pathlib import Path
@@ -38,20 +40,48 @@ def inject_base_style():
         }}
         .stApp {{ background: {COLORS['page_bg']}; }}
         [data-testid="stMetricValue"] {{ font-weight: 800; color: {COLORS['navy']}; }}
-        section[data-testid="stSidebar"] {{
-            background: linear-gradient(180deg, {COLORS['navy']} 0%, {COLORS['navy_dark']} 100%);
-        }}
-        section[data-testid="stSidebar"] * {{ color: #ffffff !important; }}
 
-        /* Streamlit's built-in sidebar page-nav highlights the active/hovered
-           page with a light blue by default — force it to brand orange so no
-           blue survives anywhere in the UI. */
-        section[data-testid="stSidebarNav"] a[aria-current="page"],
-        section[data-testid="stSidebarNav"] a:hover,
-        [data-testid="stSidebarNavLink"][aria-selected="true"],
-        [data-testid="stSidebarNavLink"]:hover {{
-            background-color: rgba(247, 168, 49, 0.22) !important;
-            border-radius: 8px !important;
+        /* Navigation now lives in a horizontal top tab bar (st.navigation(...,
+           position="top")) instead of the old left sidebar, and nothing in
+           this app calls st.sidebar anymore. A couple of Streamlit releases
+           had a transient bug where position="top" still also drew the old
+           sidebar nav — hide it outright so there is never a second, stray
+           nav even if that resurfaces. */
+        section[data-testid="stSidebar"], section[data-testid="stSidebarNav"] {{
+            display: none !important;
+        }}
+
+        /* Streamlit's own top header, which now hosts the page tabs. */
+        header[data-testid="stHeader"], .stAppHeader {{
+            background: {COLORS['navy']} !important;
+        }}
+
+        /* The page tabs themselves — styled as raised, rounded boxes instead
+           of a plain link row, with the active tab picked out in brand
+           orange. Streamlit doesn't publish a stable class name for these
+           yet, so this targets every plausible link/tab element inside the
+           header rather than one exact selector. */
+        .stAppHeader a,
+        .stAppHeader [data-testid="stNavigationLink"],
+        .stAppHeader [role="tab"] {{
+            background: rgba(255, 255, 255, 0.10) !important;
+            border: 1px solid rgba(255, 255, 255, 0.22) !important;
+            border-radius: 10px !important;
+            margin: 0 4px !important;
+            padding: 6px 16px !important;
+            color: #ffffff !important;
+            font-weight: 700 !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+        }}
+        .stAppHeader a:hover,
+        .stAppHeader [role="tab"]:hover {{
+            background: rgba(255, 255, 255, 0.2) !important;
+        }}
+        .stAppHeader a[aria-current="page"],
+        .stAppHeader [aria-selected="true"] {{
+            background: {COLORS['orange']} !important;
+            border-color: {COLORS['orange']} !important;
+            color: {COLORS['navy']} !important;
         }}
 
         /* Links and other native widget accents default to Streamlit's theme
@@ -64,21 +94,6 @@ def inject_base_style():
         div.stButton > button[kind="primary"], div.stButton > button:not([kind]) {{
             background: {COLORS['navy']};
             border-color: {COLORS['navy']};
-        }}
-
-        /* The sidebar forces all its text white (for contrast on the navy
-           background) — but that also whited-out the Log out button's own
-           label on top of Streamlit's default light button background,
-           making it unreadable. Give sidebar buttons their own dark,
-           bordered look so the white label stays legible. */
-        section[data-testid="stSidebar"] div.stButton > button {{
-            background: rgba(255, 255, 255, 0.12) !important;
-            border: 1px solid rgba(255, 255, 255, 0.45) !important;
-            color: #ffffff !important;
-        }}
-        section[data-testid="stSidebar"] div.stButton > button:hover {{
-            background: rgba(255, 255, 255, 0.24) !important;
-            border-color: #ffffff !important;
         }}
         .nav-card {{
             background: #ffffff;
@@ -213,18 +228,29 @@ def status_badge_html(label: str) -> str:
     return f'<span class="nav-pill" style="background:{color}22;color:{color};">{label}</span>'
 
 
-def sidebar_user_box():
-    """Renders once, in the sidebar only. The brand logo itself is pinned to
-    the top-left corner by st.logo() (called from inject_base_style()) — this
-    just adds the user/session info below Streamlit's own page navigation."""
+def top_user_bar():
+    """Renders once, from the router (streamlit_app.py), right under the top
+    navigation tabs — replaces the old left sidebar box entirely. Shows who's
+    logged in, their role, the data-source note, and Log out, in one slim
+    horizontal strip at the top of the page content."""
     user = current_user()
-    with st.sidebar:
-        st.caption("CeLAPI · German Jordanian University")
-        st.divider()
-        if user:
-            role_label = "Admin" if is_admin() else "Team member"
-            st.markdown(f"**{user['name']}**  \n{role_label}")
-            if st.button("Log out", use_container_width=True):
-                logout()
-        st.divider()
-        st.caption("Data source: Google Sheets — refreshes every 20s")
+    if not user:
+        return
+    role_label = "Admin" if is_admin() else "Team member"
+    ink = COLORS["ink"]
+    border = COLORS["border"]
+    info_col, logout_col = st.columns([6, 1])
+    with info_col:
+        st.markdown(
+            f"<div style='font-size:12.5px;color:{ink};padding-top:8px;'>"
+            f"👤 <b>{user['name']}</b> · {role_label} &nbsp;·&nbsp; "
+            "Data source: Google Sheets — refreshes every 20s</div>",
+            unsafe_allow_html=True,
+        )
+    with logout_col:
+        if st.button("Log out", use_container_width=True, key="top_user_bar_logout"):
+            logout()
+    st.markdown(
+        f"<hr style='margin:8px 0 18px 0;border:none;border-top:1px solid {border};'>",
+        unsafe_allow_html=True,
+    )

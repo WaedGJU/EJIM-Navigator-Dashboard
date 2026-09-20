@@ -2,19 +2,15 @@ import datetime
 import pandas as pd
 import streamlit as st
 
-from utils.auth import login_gate, current_user, is_admin
-from utils.style import inject_base_style, sidebar_user_box, COLORS, status_badge_html
+from utils.auth import current_user, is_admin
+from utils.style import COLORS, status_badge_html
 from utils.sheets import load_activities, load_users, update_activity_cell, ConflictError
 from utils.compute import enrich
 from utils.constants import PROJECT_NAME
 from utils.meeting_pdf import build_meeting_minutes_pdf
 
-st.set_page_config(page_title="Meeting Prep", page_icon="🗓️", layout="wide")
-inject_base_style()
-login_gate()
-sidebar_user_box()
-
 # Team meetings happen every Sunday and Tuesday.
+FIXED_ATTENDANCE_ROSTER = ["Ziad", "Feras", "Waed", "Omar", "Heba", "Karma", "Rania"]
 MEETING_WEEKDAYS = {6: "Sunday", 1: "Tuesday"}  # Python: Monday=0 ... Sunday=6
 
 FIELD_LABELS = {
@@ -118,13 +114,31 @@ st.divider()
 
 # ---------------- Attendance ----------------
 st.subheader("Attendance")
-st.caption("Internal team only — used for the meeting minutes PDF below.")
+st.caption("Fixed team roster — unchecked by default. Anyone not on this list can be added below.")
+
+
+def _select_all_attendance_changed():
+    new_val = st.session_state["attend_select_all"]
+    for _name in FIXED_ATTENDANCE_ROSTER:
+        st.session_state[f"attend_{_name}"] = new_val
+
+
+st.checkbox("Select all", key="attend_select_all", on_change=_select_all_attendance_changed)
+
 attendance = []
-att_cols = st.columns(4) if team_names else []
-for i, name in enumerate(team_names):
+att_cols = st.columns(4)
+for i, name in enumerate(FIXED_ATTENDANCE_ROSTER):
     with att_cols[i % 4]:
-        present = st.checkbox(name, value=True, key=f"attend_{name}")
+        present = st.checkbox(name, value=False, key=f"attend_{name}")
         attendance.append((name, present))
+
+extra_names_raw = st.text_input(
+    "Add anyone not on the list above (comma-separated names)",
+    key="attend_extra_names",
+    placeholder="e.g. Ahmad Nasser, Lina Qasem",
+)
+for extra_name in [n.strip() for n in extra_names_raw.split(",") if n.strip()]:
+    attendance.append((extra_name, True))
 
 st.divider()
 

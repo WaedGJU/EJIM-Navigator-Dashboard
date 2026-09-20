@@ -1,13 +1,7 @@
 import streamlit as st
 
-from utils.auth import login_gate, is_admin
-from utils.style import inject_base_style, sidebar_user_box
+from utils.auth import is_admin
 from utils.sheets import load_login_log, load_edit_log
-
-st.set_page_config(page_title="Admin Reports", page_icon="🔐", layout="wide")
-inject_base_style()
-login_gate()
-sidebar_user_box()
 
 st.title("Admin Reports")
 

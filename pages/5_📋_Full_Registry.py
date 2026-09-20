@@ -1,14 +1,7 @@
 import streamlit as st
 
-from utils.auth import login_gate
-from utils.style import inject_base_style, sidebar_user_box
 from utils.sheets import load_activities
 from utils.compute import enrich
-
-st.set_page_config(page_title="Full Registry", page_icon="📋", layout="wide")
-inject_base_style()
-login_gate()
-sidebar_user_box()
 
 st.title("Full Activity Registry")
 

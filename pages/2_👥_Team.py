@@ -1,15 +1,10 @@
 import pandas as pd
 import streamlit as st
 
-from utils.auth import login_gate, current_user
-from utils.style import inject_base_style, sidebar_user_box, COLORS, status_badge_html
+from utils.auth import current_user
+from utils.style import COLORS, status_badge_html
 from utils.sheets import load_activities, load_users, update_activity_cell, ConflictError
 from utils.compute import enrich
-
-st.set_page_config(page_title="Team", page_icon="👥", layout="wide")
-inject_base_style()
-login_gate()
-sidebar_user_box()
 
 st.title("Team")
 st.caption("Progress per person. Editing is open to everyone here — anyone can update any activity's "

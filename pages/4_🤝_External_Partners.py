@@ -1,15 +1,9 @@
 import streamlit as st
 import plotly.express as px
 
-from utils.auth import login_gate
-from utils.style import inject_base_style, sidebar_user_box, COLORS
+from utils.style import COLORS
 from utils.sheets import load_activities
 from utils.compute import enrich
-
-st.set_page_config(page_title="External Partners", page_icon="🤝", layout="wide")
-inject_base_style()
-login_gate()
-sidebar_user_box()
 
 st.title("MODEE / GIZ / MoL")
 st.caption("Every activity naming an external partner as an owner, co-owner, or dependency.")

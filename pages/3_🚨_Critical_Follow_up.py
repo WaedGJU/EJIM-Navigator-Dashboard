@@ -1,14 +1,9 @@
 import streamlit as st
 
-from utils.auth import login_gate, current_user, is_admin
-from utils.style import inject_base_style, sidebar_user_box, status_badge_html
+from utils.auth import current_user, is_admin
+from utils.style import status_badge_html
 from utils.sheets import load_activities, update_activity_cell, ConflictError
 from utils.compute import enrich
-
-st.set_page_config(page_title="Critical Follow-up", page_icon="🚨", layout="wide")
-inject_base_style()
-login_gate()
-sidebar_user_box()
 
 st.title("Critical Follow-up")
 st.caption("Direct edits write straight to Google Sheets — each member can edit only their own activities; "

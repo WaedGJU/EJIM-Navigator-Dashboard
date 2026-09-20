@@ -2,15 +2,10 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 
-from utils.auth import login_gate, current_user, is_admin
-from utils.style import inject_base_style, sidebar_user_box, COLORS, status_badge_html
+from utils.auth import current_user, is_admin
+from utils.style import COLORS, status_badge_html
 from utils.sheets import load_activities, update_activity_cell, ConflictError
 from utils.compute import enrich
-
-st.set_page_config(page_title="Work Packages", page_icon="📊", layout="wide")
-inject_base_style()
-login_gate()
-sidebar_user_box()
 
 st.title("Work Packages (WP1–WP9)")
 st.caption("Every work package as a progress card — open one to see its activities. "

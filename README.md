@@ -7,7 +7,8 @@ meetings can update the project record in real time from any device.
 ## What's in this project
 
 ```
-streamlit_app.py                 Home page — hero (logo + project name), end-date countdown, KPIs, charts
+streamlit_app.py                 Router only: page config, styling, login gate, then the top tab bar
+pages/0_🏠_Overview.py           "Project Overview" tab — hero (logo + project name), end-date countdown, KPIs, charts
 pages/1_📊_Work_Packages.py       Every WP as a progress card; open one to see its activities (admin edits due date)
 pages/2_👥_Team.py                Per-person completion; open editing of dates/owner/Done for everyone
 pages/3_🚨_Critical_Follow_up.py  Delayed / at risk / no owner / needs confirmation — auto-computed status
@@ -19,8 +20,8 @@ pages/8_➕_Add_Activity.py        Add a brand-new activity to the registry, wit
 utils/sheets.py                  All Google Sheets reads/writes (incl. appending new activities)
 utils/auth.py                    Email + PIN login, lockout, roles
 utils/compute.py                 Status bucketing, delayed/at-risk/not-started/unassigned + AutoStatus
-utils/style.py                   Brand colors/theme, top-left logo (st.logo), status badges, shared sidebar
-utils/constants.py               Project name, end date, internal deadline — shared by the home page and the PDF
+utils/style.py                   Brand colors/theme, top-left logo (st.logo), status badges, shared top user bar
+utils/constants.py               Project name, end date, internal deadline — shared by the Overview page and the PDF
 utils/meeting_pdf.py             Builds the "Minutes of Meeting" PDF (reportlab, no external service)
 .streamlit/config.toml           Brand theme (navy/orange/teal) so no default Streamlit blue shows
 data/Navigator_GoogleSheet_Template.xlsx   Import this into a new Google Sheet to get started
@@ -72,7 +73,8 @@ click **New app**, pick the repo and `streamlit_app.py`, and add the secrets fro
 - **Critical Follow-up / Meeting Prep**: a team member can only edit activities where they are the
   listed owner (`Responsible (Name)`); admins can edit everything.
 - **Add Activity**: open to everyone — anything a logged-in user adds is stamped and logged the same
-  way as any other edit.
+  way as any other edit. There's no "Responsible (Role)" field here anymore — only the owner (name)
+  is picked; that column is simply left blank for activities added through the app.
 - **Status, everywhere**: never picked from a dropdown. `utils/compute.py` computes it automatically
   as Completed / Delayed / Not started / In Progress from the Done flag plus the start/end dates —
   see the `AutoStatus` column and `utils/style.py`'s `status_badge_html()`.
@@ -81,25 +83,39 @@ click **New app**, pick the repo and `streamlit_app.py`, and add the secrets fro
   what, to what, and when.
 - After 5 failed login attempts on the same email, that email is locked for 15 minutes.
 
+## Navigation
+
+- There is no left sidebar anywhere in this app anymore. `streamlit_app.py` (the router) is the only
+  file that calls `st.set_page_config()`, `inject_base_style()`, and `login_gate()`; once someone is
+  logged in, it builds the page list and hands it to `st.navigation(PAGES, position="top")`, which
+  draws every page as a horizontal tab across the top of the app (styled as raised, rounded boxes in
+  `utils/style.py`, with the active tab picked out in brand orange). "Admin Reports" only appears as a
+  tab for admins. Every other page file assumes login/config/styling is already done and just renders
+  its own content — don't add `st.set_page_config()` or `login_gate()` calls back into them.
+- `utils/style.py`'s `top_user_bar()` (called once, from the router, right under the tabs) replaces
+  the old sidebar box: who's logged in, their role, the data-source note, and Log out, all in one
+  slim strip at the top of the page.
+
 ## Brand styling
 
 - Colors come straight from the MASAR/EJIM logo: navy `#355265`, orange `#f7a831`, teal `#2b8782`.
   `utils/style.py` defines these once as `COLORS` and every page/chart reuses them — no other blue
   or generic Streamlit accent color is used anywhere, including `.streamlit/config.toml`'s theme,
-  which recolors Streamlit's own default widget/link accents so nothing reverts to blue. The sidebar
-  "Log out" button gets its own explicit background so its white label stays readable on the navy
-  sidebar (it was previously white-on-white).
+  which recolors Streamlit's own default widget/link accents so nothing reverts to blue.
 - The logo is shown pinned to the top-left corner of the app via `st.logo()` (Streamlit ≥ 1.37) on
-  every page including the login screen. The home page additionally shows a large logo + large
-  project-name hero at the top of the page content.
+  every page including the login screen. The Project Overview tab additionally shows a large logo +
+  large project-name hero at the top of the page content.
 
 ## Meeting Prep and the minutes PDF
 
 - The agenda cards let anyone with edit rights update owner, start/end dates, the Done flag, a team
   note, and the agreed action — every saved change is written straight to Google Sheets and also
   recorded in that browser session's in-memory change log (`st.session_state["meeting_changes"]`).
-- The attendance checklist lists everyone from the `Users` tab (internal team only — external
-  partners like MODEE/GIZ/MoL are never in that tab).
+- The attendance checklist is a fixed roster — Ziad, Feras, Waed, Omar, Heba, Karma, Rania — every
+  box starts unchecked, and a "Select all" checkbox flips all seven at once. Anyone not on that list
+  (a guest, a stand-in) can still be added: type their name(s), comma-separated, into the text box
+  under the roster and they're added as present. External partners like MODEE/GIZ/MoL are never on
+  this list.
 - "Download meeting minutes (PDF)" (`utils/meeting_pdf.py`) builds a one-off PDF — title, meeting
   date, the attendance checklist, a before/after table of this session's changes, and a footer
   crediting the Evaluation and Monitoring Officer — entirely in English, using `reportlab` with no

@@ -1,15 +1,9 @@
 import datetime
 import streamlit as st
 
-from utils.auth import login_gate, current_user
-from utils.style import inject_base_style, sidebar_user_box
+from utils.auth import current_user
 from utils.sheets import load_activities, load_users, append_activity_row, get_next_activity_number
 from utils.compute import enrich
-
-st.set_page_config(page_title="Add Activity", page_icon="➕", layout="wide")
-inject_base_style()
-login_gate()
-sidebar_user_box()
 
 st.title("Add Activity")
 st.caption("For anything new that comes up and isn't in the registry yet. This writes a brand-new row "
@@ -27,9 +21,6 @@ if not df.empty:
             team_names.append(p)
 
 existing_wps = sorted(df["Original WP"].dropna().astype(str).str.strip().unique()) if not df.empty else []
-existing_roles = sorted(
-    r for r in df["Responsible (Role)"].dropna().astype(str).str.strip().unique() if r
-) if not df.empty and "Responsible (Role)" in df.columns else []
 
 OTHER_WP = "➕ Other — type a new work package"
 
@@ -52,12 +43,7 @@ with st.form("add_activity_form"):
     activity_name = st.text_input("Activity name *")
     description = st.text_area("Description / Indicator", height=80)
 
-    c1, c2 = st.columns(2)
-    role = c1.text_input(
-        "Responsible (Role)",
-        help="Existing roles in the registry: " + (", ".join(existing_roles) if existing_roles else "—"),
-    )
-    owner = c2.selectbox("Responsible (Name) — Owner *", team_names if team_names else ["—"])
+    owner = st.selectbox("Responsible (Name) — Owner *", team_names if team_names else ["—"])
 
     c3, c4 = st.columns(2)
     start_date = c3.date_input("Start date *", value=datetime.date.today())
@@ -100,7 +86,6 @@ if submitted:
             "Original WP": wp_clean,
             "Activity": activity_name_clean,
             "Description / Indicator": description.strip(),
-            "Responsible (Role)": role.strip(),
             "Responsible (Name)": owner,
             "Status": "Not started",
             "Start Date": start_date.isoformat(),
