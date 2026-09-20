@@ -16,7 +16,7 @@ login_gate()  # stops here if nobody is logged in
 sidebar_user_box()  # the one fixed logo/header for the whole app — never repeated on the page itself
 
 # ---------- Hero: big logo + big project name ----------
-hero_logo, hero_text = st.columns([1, 3.4])
+hero_logo, hero_text = st.columns([0.1, 2])
 with hero_logo:
     st.image(str(MASAR_LOGO_PATH), use_container_width=True)
 with hero_text:
@@ -24,8 +24,8 @@ with hero_text:
         f"""
         <div style="height:100%;display:flex;flex-direction:column;justify-content:center;">
           <div style="font-size:42px;font-weight:800;color:{COLORS['navy']};line-height:1.05;">{PROJECT_NAME}</div>
-          <div style="font-size:15px;color:{COLORS['ink']};margin-top:6px;">
-            CeLAPI · German Jordanian University — live status dashboard from Google Sheets
+          <div style="font-size:15px;color:{COLORS['ink']};margin-top:6px;">         
+           Designed by Eng. Waed Alswaeer — waed.alswaer@gju.edu.jo — +962795948223
           </div>
         </div>
         """,
