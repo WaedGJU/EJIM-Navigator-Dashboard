@@ -16,7 +16,7 @@ login_gate()  # stops here if nobody is logged in
 sidebar_user_box()  # the one fixed logo/header for the whole app — never repeated on the page itself
 
 # ---------- Hero: big logo + big project name ----------
-hero_logo, hero_text = st.columns([0.5, 2])
+hero_logo, hero_text = st.columns([0.1, 2])
 with hero_logo:
     st.image(str(MASAR_LOGO_PATH), use_container_width=True)
 with hero_text:
