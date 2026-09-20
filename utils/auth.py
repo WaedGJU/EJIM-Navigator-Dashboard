@@ -65,15 +65,21 @@ def login_gate():
     # from this module (current_user/logout/is_admin), so this can't be a
     # module-level import here; by the time login_gate() actually runs both
     # modules are already fully loaded.
-    from utils.style import MASAR_LOGO_PATH
+    from utils.style import MASAR_LOGO_PATH, _b64
 
-    logo_col1, logo_col2, logo_col3 = st.columns([1, 1.2, 1])
-    with logo_col2:
-        st.image(str(MASAR_LOGO_PATH), width=110)
-
+    # Rendered as a plain <img> inside a text-align:center div rather than
+    # st.image() inside a column — st.image() left-aligns itself within
+    # whatever column holds it, so with a fixed width it sat off-center,
+    # not lined up above the form/box below it. This centers it exactly the
+    # same way the heading/subtext right below it are already centered.
     st.markdown(
-        f"<h3 style='text-align:center; margin-top:10px;'>{PROJECT_NAME}</h3>"
-        "<p style='text-align:center; color:#4D4D4D; margin-top:-6px;'>Log in to continue</p>",
+        f"""
+        <div style="text-align:center;">
+            <img src="data:image/png;base64,{_b64(MASAR_LOGO_PATH)}" style="width:110px;">
+        </div>
+        <h3 style='text-align:center; margin-top:10px;'>{PROJECT_NAME}</h3>
+        <p style='text-align:center; color:#4D4D4D; margin-top:-6px;'>Log in to continue</p>
+        """,
         unsafe_allow_html=True,
     )
     col1, col2, col3 = st.columns([1, 1.2, 1])
@@ -121,7 +127,7 @@ def login_gate():
 
     st.markdown(
         "<p style='text-align:center; color:#8a8f96; font-size:12.5px; margin-top:40px;'>"
-        "Designed by Eng. Waed Alswaeer — waed.alswaer@gju.edu.jo — 00962795948223</p>",
+        "Designed by Eng. Waed Alswaeer — waed.alswaer@gju.edu.jo</p>",
         unsafe_allow_html=True,
     )
 

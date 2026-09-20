@@ -134,6 +134,52 @@ def build_overview_report_pdf(project_name, generated_at, kpis_dict, wp_rows,
     rows_used = (len(kpi_pairs) + 3) // 4
     y -= rows_used * 11 * mm + 6 * mm
 
+    # ---------------- Delayed activities — its own callout box ----------------
+    # Pulled out of the KPI grid above into a dedicated, hard-to-miss box —
+    # the count already sits in "Summary" as one of eight small cells, but
+    # this is the one number a report reader shouldn't have to hunt for.
+    if y < MARGIN + 40 * mm:
+        draw_footer()
+        c.showPage()
+        y = draw_header()
+
+    box_h = 16 * mm
+    delayed_count = int(kpis_dict.get("overdue", 0))
+    box_color = C["critical"] if delayed_count else C["good"]
+
+    c.setFillColor(colors.HexColor(box_color))
+    c.setFillAlpha(0.08)
+    c.roundRect(MARGIN, y - box_h, PAGE_W - 2 * MARGIN, box_h, 2.5 * mm, stroke=0, fill=1)
+    c.setFillAlpha(1)
+    c.setStrokeColor(colors.HexColor(box_color))
+    c.setLineWidth(1.1)
+    c.roundRect(MARGIN, y - box_h, PAGE_W - 2 * MARGIN, box_h, 2.5 * mm, stroke=1, fill=0)
+
+    c.setFont("Helvetica-Bold", 20)
+    c.setFillColor(colors.HexColor(box_color))
+    c.drawString(MARGIN + 6 * mm, y - box_h + 5 * mm, str(delayed_count))
+
+    c.setFont("Helvetica-Bold", 10.5)
+    c.setFillColor(colors.HexColor(C["navy"]))
+    label_x = MARGIN + 6 * mm + c.stringWidth(str(delayed_count), "Helvetica-Bold", 20) + 5 * mm
+    c.drawString(label_x, y - box_h + 9.5 * mm, "Delayed activities")
+
+    c.setFont("Helvetica", 8.5)
+    c.setFillColor(colors.HexColor(C["ink"]))
+    if delayed_count and not delayed_df.empty:
+        worst = delayed_df.iloc[0]
+        detail = (f"Most overdue: {worst.get('Activity', '')} — "
+                  f"{int(worst.get('days_overdue', 0))} day(s) past its end date")
+    elif delayed_count:
+        detail = "Not yet completed and past their planned end date — see the full list below."
+    else:
+        detail = "Nothing is currently overdue — every open activity is within its planned end date."
+    detail = fit_text(detail, "Helvetica", 8.5, PAGE_W - 2 * MARGIN - (label_x - MARGIN))
+    c.drawString(label_x, y - box_h + 4 * mm, detail)
+    c.setFillColor(colors.black)
+
+    y -= box_h + 6 * mm
+
     # ---------------- Work package progress ----------------
     c.setFont("Helvetica-Bold", 12)
     c.drawString(MARGIN, y, "Work package progress")

@@ -258,14 +258,26 @@ else:
 
 st.markdown("**General notes**")
 st.caption("Anything discussed that isn't tied to one specific activity — goes into its own section "
-           "in the minutes PDF below.")
-general_notes = st.text_area(
-    "General notes for this meeting",
-    key="mp_general_notes",
-    height=100,
-    label_visibility="collapsed",
-    placeholder="e.g. Budget update from finance, new external partner introduced, next milestone review date...",
-)
+           "in the minutes PDF below. Click \"Save notes\" before downloading, or the box's latest "
+           "edit may not have registered yet.")
+
+# A plain st.text_area only commits its edit to Streamlit on blur (clicking
+# away) or Ctrl+Enter — typing a note and then clicking straight through to
+# "Download meeting minutes" can fire that click before the edit lands,
+# silently downloading a PDF with the notes box still empty. Wrapping it in
+# a form makes the commit explicit and atomic: nothing below sees the new
+# text until "Save notes" is clicked, so there's no race to lose.
+with st.form("mp_general_notes_form", border=False):
+    st.text_area(
+        "General notes for this meeting",
+        key="mp_general_notes",
+        height=100,
+        label_visibility="collapsed",
+        placeholder="e.g. Budget update from finance, new external partner introduced, next milestone review date...",
+    )
+    st.form_submit_button("💾 Save notes", use_container_width=False)
+
+general_notes = st.session_state.get("mp_general_notes", "")
 
 pdf_bytes = build_meeting_minutes_pdf(
     project_name=PROJECT_NAME,
