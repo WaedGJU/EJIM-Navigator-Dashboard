@@ -7,7 +7,7 @@ import pandas as pd
 from utils.style import COLORS, MASAR_LOGO_PATH
 from utils.sheets import load_activities
 from utils.compute import enrich, kpis
-from utils.constants import PROJECT_NAME, PROJECT_END_DATE, INTERNAL_DEADLINE
+from utils.constants import PROJECT_NAME, PROJECT_END_DATE, INTERNAL_DEADLINE, now_jordan
 from utils.overview_pdf import build_overview_report_pdf
 
 # Page setup (config, styling, login) all happens once in streamlit_app.py,
@@ -227,7 +227,10 @@ with t3:
 st.divider()
 
 # ---------- Download this snapshot as a PDF (for reports) ----------
-generated_at = datetime.datetime.now()
+# Jordan time specifically, not the server's own clock — Streamlit
+# Community Cloud runs its servers on UTC, which would otherwise stamp the
+# report 2-3 hours off from what the team actually sees on their own clocks.
+generated_at = now_jordan()
 overview_pdf_bytes = build_overview_report_pdf(
     project_name=PROJECT_NAME,
     generated_at=generated_at,
