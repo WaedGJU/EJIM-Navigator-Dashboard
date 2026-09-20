@@ -3,3 +3,4 @@ pandas>=2.2
 plotly>=5.22
 gspread>=6.1
 google-auth>=2.32
+Pillow>=10.0

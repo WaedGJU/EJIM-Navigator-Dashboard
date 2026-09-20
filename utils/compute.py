@@ -46,9 +46,14 @@ def enrich(df: pd.DataFrame) -> pd.DataFrame:
     if "Team Update" in df.columns:
         done_flag = df["Team Update"].astype(str).str.strip().str.lower() == "done"
         df.loc[done_flag, "Bucket"] = "Completed"
+    df["Start_dt"] = pd.to_datetime(df.get("Start Date"), errors="coerce")
     df["End_dt"] = pd.to_datetime(df.get("End Date"), errors="coerce")
     df["is_overdue"] = (df["End_dt"] < today) & (df["Bucket"] != "Completed")
     df["days_overdue"] = (today - df["End_dt"]).dt.days.where(df["is_overdue"], 0).fillna(0).astype(int)
+    # Used by Critical Follow-up to compute a status label automatically from
+    # dates alone (rather than a manually-picked status): not started yet if
+    # the planned start date hasn't arrived and the activity isn't done.
+    df["is_not_started"] = (df["Start_dt"] > today) & (df["Bucket"] != "Completed")
     df["is_unassigned"] = df["Responsible (Name)"].isna() | (df["Responsible (Name)"].astype(str).str.strip() == "")
     df["is_needs_confirmation"] = df["Status"].astype(str).str.strip().str.lower().isin(NEEDS_CONFIRM_WORDS)
 

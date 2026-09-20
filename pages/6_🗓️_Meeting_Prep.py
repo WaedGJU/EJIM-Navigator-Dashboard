@@ -36,7 +36,7 @@ for col, (date_, label), badge in zip([c1, c2], meetings, ["Next meeting", "Foll
     with col:
         st.markdown(
             f"""
-            <div style="background:linear-gradient(135deg,{COLORS['blue']},{COLORS['blue_dark']});
+            <div style="background:linear-gradient(135deg,{COLORS['navy']},{COLORS['navy_dark']});
                         border-radius:14px;padding:16px 20px;color:#fff;">
               <div style="font-size:11.5px;opacity:.85;font-weight:700;">{badge}</div>
               <div style="font-size:18px;font-weight:800;margin-top:2px;">{label} — {date_.strftime('%d %b %Y')}</div>

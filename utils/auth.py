@@ -60,11 +60,11 @@ def login_gate():
     if current_user():
         return
 
-    from utils.style import logo_html  # local import avoids a circular import at module load time
-
+    # The brand logo itself is pinned to the top-left corner by st.logo()
+    # (called from inject_base_style(), which every page runs before this
+    # gate) — this screen only needs the heading, not a second logo.
     st.markdown(
-        f"<div style='text-align:center; margin-top:50px;'>{logo_html(160)}</div>"
-        "<h3 style='text-align:center; margin-top:18px;'>Project Dashboard — Log in</h3>",
+        "<h3 style='text-align:center; margin-top:50px;'>Project Dashboard — Log in</h3>",
         unsafe_allow_html=True,
     )
     col1, col2, col3 = st.columns([1, 1.2, 1])

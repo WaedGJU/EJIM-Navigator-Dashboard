@@ -1,7 +1,7 @@
 import streamlit as st
 
 from utils.auth import login_gate, current_user, is_admin
-from utils.style import inject_base_style, sidebar_user_box
+from utils.style import inject_base_style, sidebar_user_box, COLORS
 from utils.sheets import load_activities, update_activity_cell, ConflictError
 from utils.compute import enrich
 
@@ -11,7 +11,9 @@ login_gate()
 sidebar_user_box()
 
 st.title("Critical Follow-up")
-st.caption("Direct edits write straight to Google Sheets — each member can edit only their own activities; admins can edit everything.")
+st.caption("Direct edits write straight to Google Sheets — each member can edit only their own activities; "
+           "admins can edit everything. Status here is computed automatically from the Done flag and the "
+           "start/end dates — it's never picked from a dropdown.")
 
 user = current_user()
 df = enrich(load_activities())
@@ -23,8 +25,6 @@ ACTION_OPTIONS = [
     "Escalate recruitment", "Follow up with external party (MODEE/GIZ/MoL)", "Re-prioritize / reduce scope",
     "Mark as not applicable", "Needs further discussion",
 ]
-STATUS_OPTIONS = ["Not started", "In Progress", "Completed", "On Hold",
-                   "Unconfirmed - needs update", "Proposed - Pending Validation"]
 
 
 def can_edit(row) -> bool:
@@ -34,6 +34,18 @@ def can_edit(row) -> bool:
     return user["name"].lower() in owner
 
 
+def auto_status(row) -> tuple[str, str]:
+    """The activity's status, computed only from the Done flag and the
+    start/end dates — never a manual choice."""
+    if row["Bucket"] == "Completed":
+        return "Completed", COLORS["good"]
+    if row.get("is_overdue"):
+        return "Delayed", COLORS["critical"]
+    if row.get("is_not_started"):
+        return "Not started", COLORS["neutral"]
+    return "In Progress", COLORS["navy"]
+
+
 def render_tab(sub, key_prefix):
     if sub.empty:
         st.success("Nothing in this category right now 🎉")
@@ -41,36 +53,47 @@ def render_tab(sub, key_prefix):
 
     for row_number, row in sub.iterrows():
         editable = can_edit(row)
+        status_label, status_color = auto_status(row)
         with st.container(border=True):
             c1, c2 = st.columns([2, 1])
             with c1:
                 st.markdown(f"**{row['Activity']}**")
-                st.caption(f"{row['Original WP']} · Owner: {row.get('Responsible (Name)', '—')} · "
-                           f"Status: {row['Status']} · Due: {row.get('End Date', '—')}")
+                st.caption(
+                    f"{row['Original WP']} · Owner: {row.get('Responsible (Name)', '—')}  \n"
+                    f"Start: {row.get('Start Date', '—')} · End: {row.get('End Date', '—')}"
+                )
             with c2:
+                st.markdown(
+                    f'<span class="nav-pill" style="background:{status_color}22;color:{status_color};">'
+                    f'{status_label}</span>',
+                    unsafe_allow_html=True,
+                )
                 if row.get("is_overdue"):
                     st.error(f"{int(row['days_overdue'])} days overdue")
                 elif row.get("is_atrisk"):
                     st.warning("At risk")
 
             k = f"{key_prefix}_{row_number}"
-            note_col, action_col, status_col = st.columns([2, 1.3, 1.3])
+            current_team_update = str(row.get("Team Update", "") or "").strip()
+            done_col, note_col, action_col = st.columns([1, 1.7, 1.3])
+            done_checked = done_col.checkbox(
+                "Done ✅", value=current_team_update.lower() == "done",
+                key=f"done_{k}", disabled=not editable,
+            )
             note = note_col.text_area("Team note", value=str(row.get("Team_Notes", "") or ""),
                                        key=f"note_{k}", disabled=not editable, height=68)
             action = action_col.selectbox("Agreed action", ACTION_OPTIONS,
                                            index=0, key=f"action_{k}", disabled=not editable)
-            new_status = status_col.selectbox("Update status", STATUS_OPTIONS,
-                                               index=STATUS_OPTIONS.index(row["Status"]) if row["Status"] in STATUS_OPTIONS else 0,
-                                               key=f"status_{k}", disabled=not editable)
 
-            if editable and status_col.button("💾 Save", key=f"save_{k}", use_container_width=True):
+            if editable and st.button("💾 Save", key=f"save_{k}", use_container_width=True):
                 try:
+                    new_team_update = "Done" if done_checked else ""
+                    if new_team_update != current_team_update and "Team Update" in df.columns:
+                        update_activity_cell(row_number, "Team Update", new_team_update, user)
                     if note != str(row.get("Team_Notes", "") or ""):
                         update_activity_cell(row_number, "Team_Notes", note, user)
                     if action != "— Select an action —":
                         update_activity_cell(row_number, "Agreed_Action", action, user)
-                    if new_status != row["Status"]:
-                        update_activity_cell(row_number, "Status", new_status, user)
                     st.success("Saved ✅")
                     st.rerun()
                 except ConflictError as e:

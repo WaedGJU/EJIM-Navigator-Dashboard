@@ -1,8 +1,9 @@
+import pandas as pd
 import streamlit as st
 
-from utils.auth import login_gate, current_user, is_admin
+from utils.auth import login_gate, current_user
 from utils.style import inject_base_style, sidebar_user_box, COLORS
-from utils.sheets import load_activities, update_activity_cell, ConflictError
+from utils.sheets import load_activities, load_users, update_activity_cell, ConflictError
 from utils.compute import enrich
 
 st.set_page_config(page_title="Team", page_icon="👥", layout="wide")
@@ -11,8 +12,9 @@ login_gate()
 sidebar_user_box()
 
 st.title("Team")
-st.caption("Progress per person. Each member can mark their own activities as done directly here — "
-           "admins can update anyone's.")
+st.caption("Progress per person. Editing is open to everyone here — anyone can update any activity's "
+           "start/end dates, status, owner, or mark it Done. Every change is written to the Edit Log "
+           "with who did it and when, so there's no need for a separate permission check.")
 
 user = current_user()
 df = enrich(load_activities())
@@ -25,11 +27,25 @@ STATUS_OPTIONS = ["Not started", "In Progress", "Completed", "On Hold",
 people = sorted(df["Responsible (Name)"].dropna().astype(str).str.strip().unique())
 people = [p for p in people if p]
 
+# The owner dropdown lists every active team member from the Users tab (not
+# just people who already own an activity), so reassigning to someone new
+# works too — falls back to whoever already appears in the registry if the
+# Users tab can't be reached.
+users_df = load_users()
+if not users_df.empty and "Name" in users_df.columns:
+    team_names = sorted(set(users_df["Name"].dropna().astype(str).str.strip()) | set(people))
+else:
+    team_names = people
 
-def can_edit(person: str) -> bool:
-    if is_admin():
-        return True
-    return user["name"].strip().lower() == person.strip().lower()
+
+def _parse_date(value):
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return pd.to_datetime(text).date()
+    except Exception:
+        return None
 
 
 for person in people:
@@ -38,15 +54,12 @@ for person in people:
     done = int((sub["Bucket"] == "Completed").sum())
     overdue = int(sub["is_overdue"].sum())
     pct = round(100 * done / total, 1) if total else 0
-    editable_person = can_edit(person)
 
     st.markdown(
         f"""
         <div class="nav-card" style="margin-bottom:10px;">
           <div style="display:flex;justify-content:space-between;align-items:baseline;">
-            <div style="font-weight:800;color:{COLORS['navy']};font-size:15px;">
-              {person}{' 🔓' if editable_person else ''}
-            </div>
+            <div style="font-weight:800;color:{COLORS['navy']};font-size:15px;">{person}</div>
             <div style="font-weight:800;color:{COLORS['teal']};font-size:15px;">{pct}%</div>
           </div>
           <div class="nav-progress-track"><div class="nav-progress-fill" style="width:{pct}%;"></div></div>
@@ -58,49 +71,60 @@ for person in people:
         unsafe_allow_html=True,
     )
 
-    label = "✏️ Update my activities" if (editable_person and not is_admin()) else \
-            ("✏️ Update this person's activities (admin)" if editable_person else "View activities")
-    with st.expander(label):
-        if not editable_person:
-            st.dataframe(
-                sub[["No.", "Original WP", "Activity", "Status", "End Date"]],
-                use_container_width=True, hide_index=True,
-            )
-        else:
-            for row_number, row in sub.iterrows():
-                with st.container(border=True):
-                    c1, c2 = st.columns([2, 1])
-                    with c1:
-                        st.markdown(f"**{row['Activity']}**")
-                        st.caption(f"{row['Original WP']} · Due: {row.get('End Date', '—')} · "
-                                   f"Current status: {row['Status']}")
-                    with c2:
-                        if row.get("is_overdue"):
-                            st.error(f"{int(row['days_overdue'])} days overdue")
-                        elif row.get("is_atrisk"):
-                            st.warning("At risk")
+    with st.expander("✏️ Update activities"):
+        for row_number, row in sub.iterrows():
+            with st.container(border=True):
+                c1, c2 = st.columns([2, 1])
+                with c1:
+                    st.markdown(f"**{row['Activity']}**")
+                    st.caption(f"{row['Original WP']} · Current status: {row['Status']}")
+                with c2:
+                    if row.get("is_overdue"):
+                        st.error(f"{int(row['days_overdue'])} days overdue")
+                    elif row.get("is_atrisk"):
+                        st.warning("At risk")
 
-                    k = f"team_{row_number}"
-                    status_col, done_col = st.columns([1.5, 1])
-                    new_status = status_col.selectbox(
-                        "Status", STATUS_OPTIONS,
-                        index=STATUS_OPTIONS.index(row["Status"]) if row["Status"] in STATUS_OPTIONS else 0,
-                        key=f"status_{k}",
-                    )
-                    current_team_update = str(row.get("Team Update", "") or "").strip()
-                    done_checked = done_col.checkbox(
-                        "Mark as Done ✅", value=current_team_update.lower() == "done", key=f"done_{k}",
-                    )
+                k = f"team_{row_number}"
+                current_owner = str(row.get("Responsible (Name)", "")).strip()
+                owner_options = team_names if current_owner in team_names else [current_owner] + team_names
 
-                    if st.button("💾 Save", key=f"save_{k}"):
-                        try:
-                            if new_status != row["Status"]:
-                                update_activity_cell(row_number, "Status", new_status, user)
-                            new_team_update = "Done" if done_checked else ""
-                            if new_team_update != current_team_update and "Team Update" in df.columns:
-                                update_activity_cell(row_number, "Team Update", new_team_update, user)
-                            st.success("Saved ✅")
-                            st.rerun()
-                        except ConflictError as e:
-                            st.error(str(e))
+                owner_col, status_col, done_col = st.columns([1.3, 1.6, 1])
+                new_owner = owner_col.selectbox(
+                    "Owner", owner_options,
+                    index=owner_options.index(current_owner) if current_owner in owner_options else 0,
+                    key=f"owner_{k}",
+                )
+                new_status = status_col.selectbox(
+                    "Status", STATUS_OPTIONS,
+                    index=STATUS_OPTIONS.index(row["Status"]) if row["Status"] in STATUS_OPTIONS else 0,
+                    key=f"status_{k}",
+                )
+                current_team_update = str(row.get("Team Update", "") or "").strip()
+                done_checked = done_col.checkbox(
+                    "Done ✅", value=current_team_update.lower() == "done", key=f"done_{k}",
+                )
+
+                start_col, end_col = st.columns(2)
+                current_start = str(row.get("Start Date", "") or "").strip()
+                current_end = str(row.get("End Date", "") or "").strip()
+                new_start = start_col.date_input("Start date", value=_parse_date(current_start), key=f"start_{k}")
+                new_end = end_col.date_input("End date", value=_parse_date(current_end), key=f"end_{k}")
+
+                if st.button("💾 Save", key=f"save_{k}"):
+                    try:
+                        if new_status != row["Status"]:
+                            update_activity_cell(row_number, "Status", new_status, user)
+                        new_team_update = "Done" if done_checked else ""
+                        if new_team_update != current_team_update and "Team Update" in df.columns:
+                            update_activity_cell(row_number, "Team Update", new_team_update, user)
+                        if new_owner != current_owner:
+                            update_activity_cell(row_number, "Responsible (Name)", new_owner, user)
+                        if new_start and new_start.isoformat() != current_start:
+                            update_activity_cell(row_number, "Start Date", new_start.isoformat(), user)
+                        if new_end and new_end.isoformat() != current_end:
+                            update_activity_cell(row_number, "End Date", new_end.isoformat(), user)
+                        st.success("Saved ✅")
+                        st.rerun()
+                    except ConflictError as e:
+                        st.error(str(e))
     st.divider()

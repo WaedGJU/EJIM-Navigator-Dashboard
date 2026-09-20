@@ -42,7 +42,7 @@ fig = px.bar(
     wp_pct, x="Original WP", y="pct", color="Bucket",
     text=wp_pct["pct"].apply(lambda v: f"{v:.0f}%" if v >= 6 else ""),
     color_discrete_map={
-        "Completed": COLORS["good"], "In Progress": COLORS["blue"],
+        "Completed": COLORS["good"], "In Progress": COLORS["navy"],
         "Needs Confirmation": COLORS["warning"], "Not Started": COLORS["neutral"],
     },
     labels={"pct": "% of activities", "Original WP": ""},
