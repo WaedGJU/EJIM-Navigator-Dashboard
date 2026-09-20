@@ -8,12 +8,13 @@ from utils.style import COLORS, MASAR_LOGO_PATH
 from utils.sheets import load_activities
 from utils.compute import enrich, kpis
 from utils.constants import PROJECT_NAME, PROJECT_END_DATE, INTERNAL_DEADLINE
+from utils.overview_pdf import build_overview_report_pdf
 
 # Page setup (config, styling, login) all happens once in streamlit_app.py,
 # the router, before this page is ever dispatched to — nothing to repeat here.
 
-# ---------- Hero: big logo + big project name ----------
-hero_logo, hero_text = st.columns([1, 3.4])
+# ---------- Hero: logo + project name (sized to sit next to the title, not dwarf it) ----------
+hero_logo, hero_text = st.columns([0.2, 2])
 with hero_logo:
     st.image(str(MASAR_LOGO_PATH), use_container_width=True)
 with hero_text:
@@ -21,9 +22,6 @@ with hero_text:
         f"""
         <div style="height:100%;display:flex;flex-direction:column;justify-content:center;">
           <div style="font-size:42px;font-weight:800;color:{COLORS['navy']};line-height:1.05;">{PROJECT_NAME}</div>
-          <div style="font-size:15px;color:{COLORS['ink']};margin-top:6px;">
-            CeLAPI · German Jordanian University — live status dashboard from Google Sheets
-          </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -98,6 +96,7 @@ st.divider()
 st.subheader("Work packages")
 wp_list = sorted(df["Original WP"].dropna().unique())
 cols = st.columns(3)
+wp_rows = []  # also feeds the "Download as PDF" report further down
 for i, wp in enumerate(wp_list):
     sub = df[df["Original WP"] == wp]
     total = len(sub)
@@ -105,6 +104,7 @@ for i, wp in enumerate(wp_list):
     pct = round(100 * done / total, 1) if total else 0
     delayed = int(sub["is_overdue"].sum())
     at_risk = int(sub["is_atrisk"].sum())
+    wp_rows.append({"wp": wp, "pct": pct, "done": done, "total": total, "delayed": delayed, "at_risk": at_risk})
     with cols[i % 3]:
         badges = ""
         if delayed:
@@ -223,6 +223,29 @@ with t2:
     _mini_table(delayed_df, "days_overdue")
 with t3:
     _mini_table(at_risk_df)
+
+st.divider()
+
+# ---------- Download this snapshot as a PDF (for reports) ----------
+generated_at = datetime.datetime.now()
+overview_pdf_bytes = build_overview_report_pdf(
+    project_name=PROJECT_NAME,
+    generated_at=generated_at,
+    kpis_dict=k,
+    wp_rows=wp_rows,
+    status_counts=status_counts,
+    delayed_df=delayed_df,
+    at_risk_df=at_risk_df,
+)
+st.download_button(
+    "⬇ Download this Overview as a PDF report",
+    data=overview_pdf_bytes,
+    file_name=f"navigator_overview_{generated_at.strftime('%Y-%m-%d_%H%M')}.pdf",
+    mime="application/pdf",
+    use_container_width=True,
+)
+st.caption(f"Stamped with the moment you download it — right now that would read "
+           f"{generated_at.strftime('%d %b %Y, %H:%M')}. Handy for pasting straight into a report.")
 
 st.info("💡 Use the tabs above to jump to Work Packages, Team, Critical Follow-up, "
         "External Partners, Full Registry, Meeting Prep, or Add Activity.")

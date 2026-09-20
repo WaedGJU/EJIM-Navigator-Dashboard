@@ -8,6 +8,9 @@ from pathlib import Path
 
 import streamlit as st
 from utils.auth import current_user, logout, is_admin
+from utils.constants import PROJECT_NAME
+
+BRAND_BAR_HEIGHT = 50  # px — kept as one constant so the CSS offsets below always agree
 
 # Brand palette — matches the MASAR/EJIM logo exactly:
 #   navy  #355265   orange  #f7a831   teal  #2b8782
@@ -51,9 +54,40 @@ def inject_base_style():
             display: none !important;
         }}
 
-        /* Streamlit's own top header, which now hosts the page tabs. */
+        /* A slim fixed bar (logo + project name) pinned above everything
+           else — Streamlit's own header is otherwise always the topmost
+           element on the page, so this is the only way to get the brand
+           above the tabs instead of inside/below them. */
+        #brand-bar {{
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: {BRAND_BAR_HEIGHT}px;
+            z-index: 999999;
+            background: {COLORS['navy_dark']};
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0 22px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+        }}
+        #brand-bar img {{ height: 28px; display: block; }}
+        #brand-bar span {{
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 15.5px;
+            letter-spacing: .02em;
+        }}
+
+        /* Streamlit's own top header (which hosts the page tabs) is pushed
+           down to make room for the brand bar above it, and the page's own
+           content gets that same extra space added back on top of whatever
+           top offset Streamlit already reserves for its header. */
         header[data-testid="stHeader"], .stAppHeader {{
+            top: {BRAND_BAR_HEIGHT}px !important;
             background: {COLORS['navy']} !important;
+        }}
+        div[data-testid="stAppViewContainer"] {{
+            margin-top: {BRAND_BAR_HEIGHT}px !important;
         }}
 
         /* The page tabs themselves — styled as raised, rounded boxes instead
@@ -126,7 +160,7 @@ def inject_base_style():
         """,
         unsafe_allow_html=True,
     )
-    _apply_top_left_logo()
+    _render_top_brand_bar()
 
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
@@ -139,48 +173,22 @@ def _b64(path: Path) -> str:
     return base64.b64encode(path.read_bytes()).decode()
 
 
-@st.cache_resource(show_spinner=False)
-def _combined_logo_image():
-    """Merges the MASAR + EJIM marks into a single image so the app has one
-    logo, pinned to the top-left corner via st.logo() — never repeated as a
-    big card inside the page content. Uses a solid white backing (matching
-    the app's own background) rather than transparency, since the MASAR
-    source file itself is a flat, opaque square with no alpha to crop."""
-    from PIL import Image, ImageDraw
-
-    masar = Image.open(MASAR_LOGO_PATH).convert("RGBA")
-    if not EJIM_LOGO_PATH.exists():
-        return masar
-
-    ejim = Image.open(EJIM_LOGO_PATH).convert("RGBA")
-    target_h = 80
-
-    def _resize(img, h):
-        w = max(1, int(img.width * (h / img.height)))
-        return img.resize((w, h), Image.LANCZOS)
-
-    masar_r = _resize(masar, target_h)
-    ejim_r = _resize(ejim, int(target_h * 0.68))
-    gap = 20
-    canvas_w = masar_r.width + gap + ejim_r.width
-    canvas = Image.new("RGBA", (canvas_w, target_h), (255, 255, 255, 255))
-    canvas.paste(masar_r, (0, 0), masar_r)
-    draw = ImageDraw.Draw(canvas)
-    divider_x = masar_r.width + gap // 2
-    draw.line([(divider_x, 6), (divider_x, target_h - 6)], fill=(227, 230, 234, 255), width=2)
-    canvas.paste(ejim_r, (masar_r.width + gap, (target_h - ejim_r.height) // 2), ejim_r)
-    return canvas
-
-
-def _apply_top_left_logo():
-    """Pins the MASAR/EJIM logo to the top-left corner of the app (Streamlit's
-    standard logo slot), including the login screen, so it always shows in the
-    same spot whether the sidebar is open, collapsed, or not yet reachable
-    (pre-login)."""
+def _render_top_brand_bar():
+    """Renders the fixed logo + project-name strip pinned above Streamlit's
+    own header/tabs (see the '#brand-bar' CSS above) — on every page,
+    including the login screen, so branding always shows in the same spot."""
     try:
-        st.logo(_combined_logo_image(), icon_image=str(MASAR_LOGO_PATH), size="large")
+        st.markdown(
+            f"""
+            <div id="brand-bar">
+                <img src="data:image/png;base64,{_b64(MASAR_LOGO_PATH)}" alt="MASAR logo">
+                <span>{PROJECT_NAME}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     except Exception:
-        pass  # older Streamlit without st.logo() — fail silently, rest of UI still works
+        pass  # missing logo file etc. — fail silently, rest of UI still works
 
 
 def logo_html(max_width: int = 150, with_ejim: bool = True) -> str:
@@ -189,7 +197,7 @@ def logo_html(max_width: int = 150, with_ejim: bool = True) -> str:
     HTML string because Streamlit can't nest a separate st.image() call
     inside a div opened by st.markdown(). Used only where a bigger, one-off
     logo makes sense (e.g. a printable report header) — the app's own
-    top-left logo comes from st.logo() in inject_base_style()."""
+    branding comes from the fixed brand bar in inject_base_style()."""
     masar_img = (
         f'<img src="data:image/png;base64,{_b64(MASAR_LOGO_PATH)}" '
         f'style="max-width:{max_width}px;width:100%;display:block;">'

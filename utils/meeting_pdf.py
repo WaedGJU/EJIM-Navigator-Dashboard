@@ -27,11 +27,15 @@ def build_meeting_minutes_pdf(
     meeting_date: datetime.date,
     attendance: list,
     changes: list,
+    general_notes: str = "",
 ) -> bytes:
     """
     attendance: [(name, present_bool), ...] — internal team only.
     changes: [{"activity", "wp", "field", "old", "new"}, ...] — edits saved
              on the Meeting Prep page during this session.
+    general_notes: free text for anything discussed that isn't tied to a
+             specific activity — printed as its own section, right after
+             the changes table.
     Returns the finished PDF as bytes, ready for st.download_button.
     """
     buf = BytesIO()
@@ -71,13 +75,10 @@ def build_meeting_minutes_pdf(
         fy = MARGIN
         c.setStrokeColor(colors.HexColor(COLORS["border"]))
         c.setLineWidth(0.6)
-        c.line(MARGIN, fy + 13 * mm, PAGE_W - MARGIN, fy + 13 * mm)
+        c.line(MARGIN, fy + 8 * mm, PAGE_W - MARGIN, fy + 8 * mm)
         c.setFont("Helvetica-Oblique", 8.5)
         c.setFillColor(colors.HexColor(COLORS["ink"]))
-        c.drawString(MARGIN, fy + 8.5 * mm, "This report was prepared by the Evaluation and Monitoring Officer.")
-        c.drawString(MARGIN, fy + 5.2 * mm, "Prepared by Eng. Waed Alswaeer — Evaluation and Monitoring Officer.")
-        c.drawString(MARGIN, fy + 1.9 * mm,
-                     "Designed by Eng. Waed Alswaeer — waed.alswaer@gju.edu.jo — 00962795948223")
+        c.drawString(MARGIN, fy + 3.5 * mm, "Prepared by Eng. Waed Alswaeer — Evaluation and Monitoring Officer.")
         c.setFillColor(colors.black)
 
     y = draw_header()
@@ -145,6 +146,43 @@ def build_meeting_minutes_pdf(
                 c.drawString(x + 1 * mm, y, text)
                 x += w
             y -= 5.4 * mm
+
+    # ---------------- General notes (not tied to any activity) ----------------
+    notes_text = (general_notes or "").strip()
+    if notes_text:
+        y -= 6 * mm
+        if y < MARGIN + 30 * mm:
+            draw_footer()
+            c.showPage()
+            y = draw_header()
+
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(MARGIN, y, "General notes")
+        y -= 7 * mm
+
+        c.setFont("Helvetica", 9.5)
+        max_width = PAGE_W - 2 * MARGIN
+        for paragraph in notes_text.splitlines() or [""]:
+            words = paragraph.split()
+            line = ""
+            wrapped = []
+            for word in words:
+                candidate = f"{line} {word}".strip()
+                if c.stringWidth(candidate, "Helvetica", 9.5) <= max_width:
+                    line = candidate
+                else:
+                    if line:
+                        wrapped.append(line)
+                    line = word
+            wrapped.append(line)
+            for wrapped_line in wrapped:
+                if y < MARGIN + 20 * mm:
+                    draw_footer()
+                    c.showPage()
+                    y = draw_header()
+                    c.setFont("Helvetica", 9.5)
+                c.drawString(MARGIN, y, wrapped_line)
+                y -= 5 * mm
 
     draw_footer()
     c.showPage()

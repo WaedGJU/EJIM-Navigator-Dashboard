@@ -8,6 +8,7 @@ import hashlib
 import time
 import streamlit as st
 from utils.sheets import load_users, append_login_log
+from utils.constants import PROJECT_NAME
 
 MAX_ATTEMPTS = 5
 LOCKOUT_SECONDS = 15 * 60  # 15 minutes
@@ -60,11 +61,19 @@ def login_gate():
     if current_user():
         return
 
-    # The brand logo itself is pinned to the top-left corner by st.logo()
-    # (called from inject_base_style(), which every page runs before this
-    # gate) — this screen only needs the heading, not a second logo.
+    # Local import to dodge a circular import — utils.style itself imports
+    # from this module (current_user/logout/is_admin), so this can't be a
+    # module-level import here; by the time login_gate() actually runs both
+    # modules are already fully loaded.
+    from utils.style import MASAR_LOGO_PATH
+
+    logo_col1, logo_col2, logo_col3 = st.columns([1, 1.2, 1])
+    with logo_col2:
+        st.image(str(MASAR_LOGO_PATH), width=110)
+
     st.markdown(
-        "<h3 style='text-align:center; margin-top:50px;'>Project Dashboard — Log in</h3>",
+        f"<h3 style='text-align:center; margin-top:10px;'>{PROJECT_NAME}</h3>"
+        "<p style='text-align:center; color:#4D4D4D; margin-top:-6px;'>Log in to continue</p>",
         unsafe_allow_html=True,
     )
     col1, col2, col3 = st.columns([1, 1.2, 1])
@@ -109,6 +118,12 @@ def login_gate():
                             }
                             append_login_log(email_clean, row["Name"], "success")
                             st.rerun()
+
+    st.markdown(
+        "<p style='text-align:center; color:#8a8f96; font-size:12.5px; margin-top:40px;'>"
+        "Designed by Eng. Waed Alswaeer — waed.alswaer@gju.edu.jo — 00962795948223</p>",
+        unsafe_allow_html=True,
+    )
 
     # Critical: always stop here so nothing below login_gate() in the calling
     # page renders unless login just succeeded above (st.rerun() already

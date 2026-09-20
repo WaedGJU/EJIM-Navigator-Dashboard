@@ -18,11 +18,12 @@ pages/6_🗓️_Meeting_Prep.py        Meeting countdown, attendance checklist, 
 pages/7_🔐_Admin_Reports.py       Admin-only: login history and edit history
 pages/8_➕_Add_Activity.py        Add a brand-new activity to the registry, with validation, from the app
 utils/sheets.py                  All Google Sheets reads/writes (incl. appending new activities)
-utils/auth.py                    Email + PIN login, lockout, roles
+utils/auth.py                    Email + PIN login, lockout, roles, login-page branding
 utils/compute.py                 Status bucketing, delayed/at-risk/not-started/unassigned + AutoStatus
-utils/style.py                   Brand colors/theme, top-left logo (st.logo), status badges, shared top user bar
-utils/constants.py               Project name, end date, internal deadline — shared by the Overview page and the PDF
+utils/style.py                   Brand colors/theme, fixed top brand bar (logo + project name), status badges, shared top user bar
+utils/constants.py               Project name, end date, internal deadline — shared by the Overview page and both PDFs
 utils/meeting_pdf.py             Builds the "Minutes of Meeting" PDF (reportlab, no external service)
+utils/overview_pdf.py            Builds a dated snapshot of the Project Overview page as a PDF (reportlab, no external service)
 .streamlit/config.toml           Brand theme (navy/orange/teal) so no default Streamlit blue shows
 data/Navigator_GoogleSheet_Template.xlsx   Import this into a new Google Sheet to get started
 data/temporary_pins.txt          Auto-generated PINs — distribute privately, then delete this file
@@ -102,9 +103,17 @@ click **New app**, pick the repo and `streamlit_app.py`, and add the secrets fro
   `utils/style.py` defines these once as `COLORS` and every page/chart reuses them — no other blue
   or generic Streamlit accent color is used anywhere, including `.streamlit/config.toml`'s theme,
   which recolors Streamlit's own default widget/link accents so nothing reverts to blue.
-- The logo is shown pinned to the top-left corner of the app via `st.logo()` (Streamlit ≥ 1.37) on
-  every page including the login screen. The Project Overview tab additionally shows a large logo +
-  large project-name hero at the top of the page content.
+- The logo + project name sit in a slim fixed bar (`#brand-bar` in `utils/style.py`) pinned above
+  everything else on every page, including the login screen — above Streamlit's own header/tab bar,
+  not inside it. There's no separate small `st.logo()` icon anymore; the brand bar is the only logo
+  on screen. `BRAND_BAR_HEIGHT` (in `utils/style.py`) is the one constant to change if that bar's
+  height ever needs to change — the CSS that pushes the native header and page content down to make
+  room for it reads from the same constant, so the two never drift out of sync.
+- The Project Overview tab's hero shows a small logo next to the project-name title (sized so it sits
+  beside the title rather than dwarfing it) — no "CeLAPI · German Jordanian University" subtitle
+  underneath it anymore.
+- The login page also shows the logo and project name above the form, and a small credit line under
+  the form: "Designed by Eng. Waed Alswaeer — waed.alswaer@gju.edu.jo — 00962795948223" (`utils/auth.py`).
 
 ## Meeting Prep and the minutes PDF
 
@@ -116,11 +125,23 @@ click **New app**, pick the repo and `streamlit_app.py`, and add the secrets fro
   (a guest, a stand-in) can still be added: type their name(s), comma-separated, into the text box
   under the roster and they're added as present. External partners like MODEE/GIZ/MoL are never on
   this list.
+- A free-text "General notes" box sits right above the PDF download button, for anything discussed
+  that isn't tied to one specific activity (a budget update, a new partner, a milestone date). Its
+  content flows straight into its own "General notes" section in the minutes PDF, right after the
+  changes table — leave it blank and that section is simply skipped.
 - "Download meeting minutes (PDF)" (`utils/meeting_pdf.py`) builds a one-off PDF — title, meeting
-  date, the attendance checklist, a before/after table of this session's changes, and a footer
-  crediting the Evaluation and Monitoring Officer — entirely in English, using `reportlab` with no
-  external service calls. The change log is cleared with the "Clear changes log" button and starts
-  empty again for the next meeting.
+  date, the attendance checklist, a before/after table of this session's changes, the general notes
+  above (if any), and a one-line footer crediting the Evaluation and Monitoring Officer — entirely in
+  English, using `reportlab` with no external service calls. The change log is cleared with the
+  "Clear changes log" button and starts empty again for the next meeting.
+
+## Overview PDF snapshot
+
+- "Download this Overview as a PDF report" (bottom of the Project Overview tab, `utils/overview_pdf.py`)
+  exports everything currently on that page — KPI summary, per-work-package progress, status
+  distribution, and the delayed/at-risk lists — as a PDF stamped with the exact date and time it was
+  generated ("REPORT GENERATED" box under the header), so it can be dropped straight into a report
+  later. Same `reportlab`-only approach as the meeting minutes PDF, no chart images.
 
 ## Notes on the status/flag logic
 

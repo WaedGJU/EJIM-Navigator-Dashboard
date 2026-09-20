@@ -256,11 +256,23 @@ if changes_this_session:
 else:
     st.caption("No changes saved yet this session — the PDF will note that until something is edited above.")
 
+st.markdown("**General notes**")
+st.caption("Anything discussed that isn't tied to one specific activity — goes into its own section "
+           "in the minutes PDF below.")
+general_notes = st.text_area(
+    "General notes for this meeting",
+    key="mp_general_notes",
+    height=100,
+    label_visibility="collapsed",
+    placeholder="e.g. Budget update from finance, new external partner introduced, next milestone review date...",
+)
+
 pdf_bytes = build_meeting_minutes_pdf(
     project_name=PROJECT_NAME,
     meeting_date=datetime.date.today(),
     attendance=attendance,
     changes=changes_this_session,
+    general_notes=general_notes,
 )
 st.download_button(
     "⬇ Download meeting minutes (PDF)",
