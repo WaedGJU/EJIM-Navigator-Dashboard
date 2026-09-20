@@ -10,7 +10,7 @@ from utils.constants import PROJECT_NAME, now_jordan
 from utils.meeting_pdf import build_meeting_minutes_pdf
 
 # Team meetings happen every Sunday and Tuesday.
-FIXED_ATTENDANCE_ROSTER = ["Ziad", "Feras", "Waed", "Omar", "Heba", "Karma", "Rania", "Mohammad"]
+FIXED_ATTENDANCE_ROSTER = ["Ziad", "Feras", "Waed", "Omar", "Heba", "Karma", "Rania", "Mohammad", "Maryam"]
 MEETING_WEEKDAYS = {6: "Sunday", 1: "Tuesday"}  # Python: Monday=0 ... Sunday=6
 
 FIELD_LABELS = {
