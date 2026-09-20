@@ -1,5 +1,3 @@
-import datetime
-
 import streamlit as st
 import plotly.express as px
 import pandas as pd
@@ -28,7 +26,9 @@ with hero_text:
     )
 
 # ---------- Project end date + countdown ----------
-days_left = (PROJECT_END_DATE - datetime.date.today()).days
+# Jordan's own calendar day, not the server's (Streamlit Community Cloud
+# runs UTC) — otherwise the countdown can be a day off near midnight.
+days_left = (PROJECT_END_DATE - now_jordan().date()).days
 if days_left >= 0:
     counter_value, counter_label = days_left, "days left"
     counter_color = COLORS["critical"] if days_left <= 14 else (COLORS["warning"] if days_left <= 30 else COLORS["teal"])
@@ -193,7 +193,7 @@ st.plotly_chart(fig3, use_container_width=True)
 st.divider()
 
 # ---------- This week / delayed / at-risk ----------
-today = pd.Timestamp(datetime.date.today())
+today = pd.Timestamp(now_jordan().date())
 week_ahead = today + pd.Timedelta(days=7)
 this_week = df[(df["Bucket"] != "Completed") & (df["End_dt"] >= today) & (df["End_dt"] <= week_ahead)]
 delayed_df = df[df["is_overdue"]].sort_values("days_overdue", ascending=False)

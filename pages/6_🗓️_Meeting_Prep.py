@@ -6,7 +6,7 @@ from utils.auth import current_user, is_admin
 from utils.style import COLORS, status_badge_html
 from utils.sheets import load_activities, load_users, update_activity_cell, ConflictError
 from utils.compute import enrich
-from utils.constants import PROJECT_NAME
+from utils.constants import PROJECT_NAME, now_jordan
 from utils.meeting_pdf import build_meeting_minutes_pdf
 
 # Team meetings happen every Sunday and Tuesday.
@@ -24,7 +24,7 @@ FIELD_LABELS = {
 
 
 def next_meetings(n=2):
-    today = datetime.date.today()
+    today = now_jordan().date()
     found = []
     d = today
     while len(found) < n:
@@ -64,7 +64,7 @@ st.caption("Everything the team needs ahead of the Sunday / Tuesday meeting — 
 meetings = next_meetings(2)
 c1, c2 = st.columns(2)
 for col, (date_, label), badge in zip([c1, c2], meetings, ["Next meeting", "Following meeting"]):
-    days_away = (date_ - datetime.date.today()).days
+    days_away = (date_ - now_jordan().date()).days
     with col:
         st.markdown(
             f"""
@@ -103,7 +103,7 @@ with b1:
     st.download_button(
         "⬇ Export meeting agenda (CSV)",
         agenda.to_csv(index=False).encode("utf-8-sig"),
-        file_name=f"navigator_meeting_agenda_{datetime.date.today()}.csv",
+        file_name=f"navigator_meeting_agenda_{now_jordan().date()}.csv",
         use_container_width=True,
     )
 with b2:
@@ -279,17 +279,23 @@ with st.form("mp_general_notes_form", border=False):
 
 general_notes = st.session_state.get("mp_general_notes", "")
 
+# Jordan time specifically, not the server's own clock — Streamlit Community
+# Cloud runs its servers on UTC, which would otherwise stamp the minutes
+# 2-3 hours off from what the team actually sees on their own clocks.
+generated_at = now_jordan()
+
 pdf_bytes = build_meeting_minutes_pdf(
     project_name=PROJECT_NAME,
-    meeting_date=datetime.date.today(),
+    meeting_date=generated_at.date(),
     attendance=attendance,
     changes=changes_this_session,
     general_notes=general_notes,
+    generated_at=generated_at,
 )
 st.download_button(
     "⬇ Download meeting minutes (PDF)",
     data=pdf_bytes,
-    file_name=f"navigator_meeting_minutes_{datetime.date.today()}.pdf",
+    file_name=f"navigator_meeting_minutes_{generated_at.strftime('%Y-%m-%d_%H%M')}.pdf",
     mime="application/pdf",
     use_container_width=True,
 )

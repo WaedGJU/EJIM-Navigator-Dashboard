@@ -4,8 +4,14 @@
 """
 
 import re
-import datetime
 import pandas as pd
+
+# Jordan wall-clock date, not the server's own clock — Streamlit Community
+# Cloud runs its servers on UTC, so "today" from datetime.date.today() can
+# land on the wrong calendar day near midnight in Jordan, throwing off every
+# overdue/at-risk flag computed here (used across Work Packages, Team,
+# Critical Follow-up, and Full Registry).
+from utils.constants import now_jordan
 
 DONE_WORDS = {"completed", "done"}
 PROGRESS_WORDS = {"in progress", "ongoing"}
@@ -35,7 +41,7 @@ def enrich(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
     df = df.copy()
-    today = pd.Timestamp(datetime.date.today())
+    today = pd.Timestamp(now_jordan().date())
 
     df["Bucket"] = df["Status"].apply(_bucket)
 

@@ -4,11 +4,16 @@ Uses a Service Account ("robot" credentials) stored in st.secrets, not any
 individual team member's Google account.
 """
 
-import datetime
 import gspread
 import pandas as pd
 import streamlit as st
 from google.oauth2.service_account import Credentials
+
+# Jordan wall-clock time, not the server's own clock — Streamlit Community
+# Cloud runs its servers on UTC, which would otherwise stamp every
+# Last_Edited_At / Edit_Log / Login_Log entry 2-3 hours off from what the
+# team actually sees on their own clocks.
+from utils.constants import now_jordan
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -90,7 +95,7 @@ def update_activity_cell(row_number: int, column_name: str, new_value, user: dic
 
     ws.update_cell(row_number, col_idx, new_value)
 
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = now_jordan().strftime("%Y-%m-%d %H:%M:%S")
     if "Last_Edited_By" in header:
         ws.update_cell(row_number, header.index("Last_Edited_By") + 1, user["name"])
     if "Last_Edited_At" in header:
@@ -119,7 +124,7 @@ def append_activity_row(values: dict, user: dict) -> int:
     other edit. Returns the new row's row number inside the sheet."""
     ws = _ws(ACTIVITY_SHEET)
     header = ws.row_values(1)
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = now_jordan().strftime("%Y-%m-%d %H:%M:%S")
 
     row_values = dict(values)
     if "Last_Edited_By" in header:
@@ -142,7 +147,7 @@ class ConflictError(Exception):
 
 
 def append_edit_log(user: dict, row_number: int, column_name: str, old_value, new_value):
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = now_jordan().strftime("%Y-%m-%d %H:%M:%S")
     _ws(EDIT_LOG_SHEET).append_row(
         [now, user["email"], user["name"], row_number, column_name, str(old_value), str(new_value)],
         value_input_option="USER_ENTERED",
@@ -150,7 +155,7 @@ def append_edit_log(user: dict, row_number: int, column_name: str, old_value, ne
 
 
 def append_login_log(email: str, name: str, result: str):
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = now_jordan().strftime("%Y-%m-%d %H:%M:%S")
     _ws(LOGIN_LOG_SHEET).append_row([now, email, name, result], value_input_option="USER_ENTERED")
 
 

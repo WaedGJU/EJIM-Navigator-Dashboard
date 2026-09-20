@@ -17,6 +17,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 
 from utils.style import COLORS, MASAR_LOGO_PATH
+from utils.constants import now_jordan
 
 PAGE_W, PAGE_H = A4
 MARGIN = 18 * mm
@@ -28,6 +29,7 @@ def build_meeting_minutes_pdf(
     attendance: list,
     changes: list,
     general_notes: str = "",
+    generated_at: datetime.datetime = None,
 ) -> bytes:
     """
     attendance: [(name, present_bool), ...] — internal team only.
@@ -36,8 +38,14 @@ def build_meeting_minutes_pdf(
     general_notes: free text for anything discussed that isn't tied to a
              specific activity — printed as its own section, right after
              the changes table.
+    generated_at: a datetime — stamped on the minutes as when the PDF was
+             produced. Always shown in Jordan time (Asia/Amman) regardless
+             of what timezone the app happens to be hosted in — defaults to
+             now_jordan() if not passed in explicitly.
     Returns the finished PDF as bytes, ready for st.download_button.
     """
+    if generated_at is None:
+        generated_at = now_jordan()
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
 
@@ -66,10 +74,18 @@ def build_meeting_minutes_pdf(
         weekday = meeting_date.strftime("%A")
         c.drawString(MARGIN + 24 * mm, y - 13.5 * mm, f"Weekly team meeting · {weekday}, {meeting_date.strftime('%d %B %Y')}")
 
+        # "Generated ..." stamp, always in Jordan time regardless of where the
+        # app is hosted (Streamlit Community Cloud's servers run on UTC).
+        c.setFont("Helvetica-Oblique", 8)
+        c.setFillColor(colors.HexColor(COLORS["ink"]))
+        c.drawString(MARGIN + 24 * mm, y - 18.5 * mm,
+                     f"Generated {generated_at.strftime('%d %b %Y, %H:%M')} (Jordan time)")
+        c.setFillColor(colors.black)
+
         c.setStrokeColor(colors.HexColor(COLORS["border"]))
         c.setLineWidth(0.8)
-        c.line(MARGIN, y - 17 * mm, PAGE_W - MARGIN, y - 17 * mm)
-        return y - 23 * mm
+        c.line(MARGIN, y - 22 * mm, PAGE_W - MARGIN, y - 22 * mm)
+        return y - 28 * mm
 
     def draw_footer():
         fy = MARGIN

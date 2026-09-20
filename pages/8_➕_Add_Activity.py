@@ -4,6 +4,7 @@ import streamlit as st
 from utils.auth import current_user
 from utils.sheets import load_activities, load_users, append_activity_row, get_next_activity_number
 from utils.compute import enrich
+from utils.constants import now_jordan
 
 st.title("Add Activity")
 st.caption("For anything new that comes up and isn't in the registry yet. This writes a brand-new row "
@@ -46,8 +47,9 @@ with st.form("add_activity_form"):
     owner = st.selectbox("Responsible (Name) — Owner *", team_names if team_names else ["—"])
 
     c3, c4 = st.columns(2)
-    start_date = c3.date_input("Start date *", value=datetime.date.today())
-    end_date = c4.date_input("End date *", value=datetime.date.today() + datetime.timedelta(days=7))
+    today_jordan = now_jordan().date()
+    start_date = c3.date_input("Start date *", value=today_jordan)
+    end_date = c4.date_input("End date *", value=today_jordan + datetime.timedelta(days=7))
 
     source = st.text_input("Source", value="Team-reported (added via app)")
 
