@@ -100,6 +100,42 @@ def update_activity_cell(row_number: int, column_name: str, new_value, user: dic
     clear_activity_cache()
 
 
+def get_next_activity_number() -> int:
+    """The next 'No.' value for a brand-new activity — one past the highest
+    number currently in the sheet (falls back to the row count if that
+    column is missing or non-numeric)."""
+    df = load_activities()
+    if df.empty or "No." not in df.columns:
+        return 1
+    nums = pd.to_numeric(df["No."], errors="coerce").dropna()
+    return int(nums.max()) + 1 if not nums.empty else len(df) + 1
+
+
+def append_activity_row(values: dict, user: dict) -> int:
+    """Appends a brand-new activity row. `values` is matched against the
+    sheet's own header so nothing lands in the wrong column regardless of
+    field order, and any column not passed in is left blank. Stamps who
+    added it and logs the addition to Edit_Log — same accountability as any
+    other edit. Returns the new row's row number inside the sheet."""
+    ws = _ws(ACTIVITY_SHEET)
+    header = ws.row_values(1)
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    row_values = dict(values)
+    if "Last_Edited_By" in header:
+        row_values.setdefault("Last_Edited_By", user["name"])
+    if "Last_Edited_At" in header:
+        row_values.setdefault("Last_Edited_At", now)
+
+    row = [row_values.get(col, "") for col in header]
+    ws.append_row(row, value_input_option="USER_ENTERED")
+    new_row_number = len(ws.get_all_values())  # the row we just appended lands last
+
+    append_edit_log(user, new_row_number, "New Activity", "—", row_values.get("Activity", ""))
+    clear_activity_cache()
+    return new_row_number
+
+
 class ConflictError(Exception):
     """Raised when two people try to edit the same row at roughly the same moment."""
     pass

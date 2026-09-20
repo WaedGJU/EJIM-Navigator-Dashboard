@@ -7,18 +7,21 @@ meetings can update the project record in real time from any device.
 ## What's in this project
 
 ```
-streamlit_app.py                 Home page — KPIs, work-package chart, status donut, team chart
-pages/1_📊_Work_Packages.py       Every WP as a progress card; open one to see/edit its activities (admin)
-pages/2_👥_Team.py                Per-person completion; open editing of dates/status/owner for everyone
+streamlit_app.py                 Home page — hero (logo + project name), end-date countdown, KPIs, charts
+pages/1_📊_Work_Packages.py       Every WP as a progress card; open one to see its activities (admin edits due date)
+pages/2_👥_Team.py                Per-person completion; open editing of dates/owner/Done for everyone
 pages/3_🚨_Critical_Follow_up.py  Delayed / at risk / no owner / needs confirmation — auto-computed status
 pages/4_🤝_External_Partners.py   MODEE / GIZ / MoL activities
-pages/5_📋_Full_Registry.py       Filterable table of all 187 activities, CSV export
-pages/6_🗓️_Meeting_Prep.py        Sunday/Tuesday countdown + meeting agenda + editable follow-up
+pages/5_📋_Full_Registry.py       Filterable table of all activities, CSV export
+pages/6_🗓️_Meeting_Prep.py        Meeting countdown, attendance checklist, live agenda editing, PDF minutes export
 pages/7_🔐_Admin_Reports.py       Admin-only: login history and edit history
-utils/sheets.py                  All Google Sheets reads/writes
+pages/8_➕_Add_Activity.py        Add a brand-new activity to the registry, with validation, from the app
+utils/sheets.py                  All Google Sheets reads/writes (incl. appending new activities)
 utils/auth.py                    Email + PIN login, lockout, roles
-utils/compute.py                 Status bucketing, delayed/at-risk/not-started/unassigned logic
-utils/style.py                   Brand colors/theme, top-left logo (st.logo), shared sidebar
+utils/compute.py                 Status bucketing, delayed/at-risk/not-started/unassigned + AutoStatus
+utils/style.py                   Brand colors/theme, top-left logo (st.logo), status badges, shared sidebar
+utils/constants.py               Project name, end date, internal deadline — shared by the home page and the PDF
+utils/meeting_pdf.py             Builds the "Minutes of Meeting" PDF (reportlab, no external service)
 .streamlit/config.toml           Brand theme (navy/orange/teal) so no default Streamlit blue shows
 data/Navigator_GoogleSheet_Template.xlsx   Import this into a new Google Sheet to get started
 data/temporary_pins.txt          Auto-generated PINs — distribute privately, then delete this file
@@ -61,16 +64,21 @@ click **New app**, pick the repo and `streamlit_app.py`, and add the secrets fro
 
 ## How permissions work
 
-- **Work Packages page**: admins can edit an activity's status and due date from the WP card; team
-  members see the same card but the activity list is read-only.
+- **Work Packages page**: admins can edit an activity's due date from the WP card; team members see
+  the same card but the activity list is read-only. Status is shown as a badge, never edited here.
 - **Team page**: open to everyone — any logged-in user can edit any activity's start/end dates,
-  status, "Done" flag, or reassign its owner. There's no ownership/admin check here on purpose,
-  because every change is written to `Edit_Log` anyway.
+  owner, or "Done" flag. There's no ownership/admin check here on purpose, because every change is
+  written to `Edit_Log` anyway.
 - **Critical Follow-up / Meeting Prep**: a team member can only edit activities where they are the
-  listed owner (`Responsible (Name)`); admins can edit everything. Status on Critical Follow-up is
-  never picked manually — it's computed from the Done flag plus the start/end dates.
+  listed owner (`Responsible (Name)`); admins can edit everything.
+- **Add Activity**: open to everyone — anything a logged-in user adds is stamped and logged the same
+  way as any other edit.
+- **Status, everywhere**: never picked from a dropdown. `utils/compute.py` computes it automatically
+  as Completed / Delayed / Not started / In Progress from the Done flag plus the start/end dates —
+  see the `AutoStatus` column and `utils/style.py`'s `status_badge_html()`.
 - Every login (success or failure) is written to `Login_Log`.
-- Every saved edit is written to `Edit_Log` with who changed what, from what, to what, and when.
+- Every saved edit (and every new activity) is written to `Edit_Log` with who changed what, from
+  what, to what, and when.
 - After 5 failed login attempts on the same email, that email is locked for 15 minutes.
 
 ## Brand styling
@@ -78,9 +86,25 @@ click **New app**, pick the repo and `streamlit_app.py`, and add the secrets fro
 - Colors come straight from the MASAR/EJIM logo: navy `#355265`, orange `#f7a831`, teal `#2b8782`.
   `utils/style.py` defines these once as `COLORS` and every page/chart reuses them — no other blue
   or generic Streamlit accent color is used anywhere, including `.streamlit/config.toml`'s theme,
-  which recolors Streamlit's own default widget/link accents so nothing reverts to blue.
-- The logo is shown once, pinned to the top-left corner of the app via `st.logo()` (Streamlit
-  ≥ 1.37), on every page including the login screen — it's never repeated as a big card elsewhere.
+  which recolors Streamlit's own default widget/link accents so nothing reverts to blue. The sidebar
+  "Log out" button gets its own explicit background so its white label stays readable on the navy
+  sidebar (it was previously white-on-white).
+- The logo is shown pinned to the top-left corner of the app via `st.logo()` (Streamlit ≥ 1.37) on
+  every page including the login screen. The home page additionally shows a large logo + large
+  project-name hero at the top of the page content.
+
+## Meeting Prep and the minutes PDF
+
+- The agenda cards let anyone with edit rights update owner, start/end dates, the Done flag, a team
+  note, and the agreed action — every saved change is written straight to Google Sheets and also
+  recorded in that browser session's in-memory change log (`st.session_state["meeting_changes"]`).
+- The attendance checklist lists everyone from the `Users` tab (internal team only — external
+  partners like MODEE/GIZ/MoL are never in that tab).
+- "Download meeting minutes (PDF)" (`utils/meeting_pdf.py`) builds a one-off PDF — title, meeting
+  date, the attendance checklist, a before/after table of this session's changes, and a footer
+  crediting the Evaluation and Monitoring Officer — entirely in English, using `reportlab` with no
+  external service calls. The change log is cleared with the "Clear changes log" button and starts
+  empty again for the next meeting.
 
 ## Notes on the status/flag logic
 
@@ -88,3 +112,9 @@ click **New app**, pick the repo and `streamlit_app.py`, and add the secrets fro
 (and not already overdue), and "not started" as: start date still in the future and not completed.
 Adjust these rules, or the status-bucket keyword matching, once the team agrees on exact
 definitions — it's meant as a working starting point, not a final spec.
+
+## Project timeline
+
+`utils/constants.py` holds `PROJECT_NAME`, `PROJECT_END_DATE` (31 Oct 2026) and `INTERNAL_DEADLINE`
+(17 Oct 2026, a 2-week buffer) — both the home-page countdown and the meeting-minutes PDF read from
+here, so update this one file if the project's dates ever change.

@@ -57,6 +57,20 @@ def enrich(df: pd.DataFrame) -> pd.DataFrame:
     df["is_unassigned"] = df["Responsible (Name)"].isna() | (df["Responsible (Name)"].astype(str).str.strip() == "")
     df["is_needs_confirmation"] = df["Status"].astype(str).str.strip().str.lower().isin(NEEDS_CONFIRM_WORDS)
 
+    # The status shown to the team is never picked manually — it's always
+    # computed from the Done flag plus the start/end dates, so it can't drift
+    # from reality. Used by Work Packages, Team, and Critical Follow-up.
+    def _auto_status(row):
+        if row["Bucket"] == "Completed":
+            return "Completed"
+        if row["is_overdue"]:
+            return "Delayed"
+        if row["is_not_started"]:
+            return "Not started"
+        return "In Progress"
+
+    df["AutoStatus"] = df.apply(_auto_status, axis=1)
+
     def find_partners(row):
         text = " ".join(str(row.get(c, "")) for c in ["Responsible (Role)", "Activity", "Source"])
         return [p for p, pat in PARTNER_PATTERNS.items() if pat.search(text)]

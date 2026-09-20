@@ -65,6 +65,21 @@ def inject_base_style():
             background: {COLORS['navy']};
             border-color: {COLORS['navy']};
         }}
+
+        /* The sidebar forces all its text white (for contrast on the navy
+           background) — but that also whited-out the Log out button's own
+           label on top of Streamlit's default light button background,
+           making it unreadable. Give sidebar buttons their own dark,
+           bordered look so the white label stays legible. */
+        section[data-testid="stSidebar"] div.stButton > button {{
+            background: rgba(255, 255, 255, 0.12) !important;
+            border: 1px solid rgba(255, 255, 255, 0.45) !important;
+            color: #ffffff !important;
+        }}
+        section[data-testid="stSidebar"] div.stButton > button:hover {{
+            background: rgba(255, 255, 255, 0.24) !important;
+            border-color: #ffffff !important;
+        }}
         .nav-card {{
             background: #ffffff;
             border: 1px solid {COLORS['border']};
@@ -180,6 +195,22 @@ def logo_html(max_width: int = 150, with_ejim: bool = True) -> str:
         '<div style="background:#fff;border-radius:12px;padding:10px 16px;'
         'display:inline-block;">' + inner + "</div>"
     )
+
+
+STATUS_BADGE_COLORS = {
+    "Completed": COLORS["good"],
+    "Delayed": COLORS["critical"],
+    "Not started": COLORS["neutral"],
+    "In Progress": COLORS["navy"],
+}
+
+
+def status_badge_html(label: str) -> str:
+    """A small colored pill for an auto-computed status (compute.py's
+    'AutoStatus' column) — used wherever status is shown but never picked
+    from a dropdown."""
+    color = STATUS_BADGE_COLORS.get(label, COLORS["neutral"])
+    return f'<span class="nav-pill" style="background:{color}22;color:{color};">{label}</span>'
 
 
 def sidebar_user_box():

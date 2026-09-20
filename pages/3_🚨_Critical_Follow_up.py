@@ -1,7 +1,7 @@
 import streamlit as st
 
 from utils.auth import login_gate, current_user, is_admin
-from utils.style import inject_base_style, sidebar_user_box, COLORS
+from utils.style import inject_base_style, sidebar_user_box, status_badge_html
 from utils.sheets import load_activities, update_activity_cell, ConflictError
 from utils.compute import enrich
 
@@ -34,18 +34,6 @@ def can_edit(row) -> bool:
     return user["name"].lower() in owner
 
 
-def auto_status(row) -> tuple[str, str]:
-    """The activity's status, computed only from the Done flag and the
-    start/end dates — never a manual choice."""
-    if row["Bucket"] == "Completed":
-        return "Completed", COLORS["good"]
-    if row.get("is_overdue"):
-        return "Delayed", COLORS["critical"]
-    if row.get("is_not_started"):
-        return "Not started", COLORS["neutral"]
-    return "In Progress", COLORS["navy"]
-
-
 def render_tab(sub, key_prefix):
     if sub.empty:
         st.success("Nothing in this category right now 🎉")
@@ -53,7 +41,6 @@ def render_tab(sub, key_prefix):
 
     for row_number, row in sub.iterrows():
         editable = can_edit(row)
-        status_label, status_color = auto_status(row)
         with st.container(border=True):
             c1, c2 = st.columns([2, 1])
             with c1:
@@ -63,11 +50,7 @@ def render_tab(sub, key_prefix):
                     f"Start: {row.get('Start Date', '—')} · End: {row.get('End Date', '—')}"
                 )
             with c2:
-                st.markdown(
-                    f'<span class="nav-pill" style="background:{status_color}22;color:{status_color};">'
-                    f'{status_label}</span>',
-                    unsafe_allow_html=True,
-                )
+                st.markdown(status_badge_html(row["AutoStatus"]), unsafe_allow_html=True)
                 if row.get("is_overdue"):
                     st.error(f"{int(row['days_overdue'])} days overdue")
                 elif row.get("is_atrisk"):

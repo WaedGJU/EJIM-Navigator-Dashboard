@@ -3,7 +3,7 @@ import streamlit as st
 import plotly.express as px
 
 from utils.auth import login_gate, current_user, is_admin
-from utils.style import inject_base_style, sidebar_user_box, COLORS
+from utils.style import inject_base_style, sidebar_user_box, COLORS, status_badge_html
 from utils.sheets import load_activities, update_activity_cell, ConflictError
 from utils.compute import enrich
 
@@ -14,13 +14,11 @@ sidebar_user_box()
 
 st.title("Work Packages (WP1–WP9)")
 st.caption("Every work package as a progress card — open one to see its activities. "
-           "Admins can update an activity's status and due date right here; it's saved to Google Sheets instantly.")
+           "Admins can update an activity's due date right here; it's saved to Google Sheets instantly. "
+           "Status is never picked manually — it's computed automatically from the Done flag and dates.")
 
 user = current_user()
 admin = is_admin()
-
-STATUS_OPTIONS = ["Not started", "In Progress", "Completed", "On Hold",
-                   "Unconfirmed - needs update", "Proposed - Pending Validation"]
 
 df = enrich(load_activities())
 if df.empty:
@@ -73,23 +71,20 @@ for i, wp in enumerate(wp_list):
             st.plotly_chart(fig, use_container_width=True, key=f"wp_pie_{i}")
 
             if not admin:
-                st.dataframe(
-                    sub[["No.", "Activity", "Responsible (Name)", "Status", "End Date"]],
-                    use_container_width=True, hide_index=True, height=260,
-                )
+                for _, row in sub.iterrows():
+                    c1, c2 = st.columns([3, 1])
+                    c1.markdown(f"**{row['Activity']}** — {row.get('Responsible (Name)', '—')}")
+                    c2.markdown(status_badge_html(row["AutoStatus"]), unsafe_allow_html=True)
             else:
                 for row_number, row in sub.iterrows():
                     with st.container(border=True):
-                        st.markdown(f"**{row['Activity']}**")
+                        h1, h2 = st.columns([3, 1])
+                        h1.markdown(f"**{row['Activity']}**")
+                        h2.markdown(status_badge_html(row["AutoStatus"]), unsafe_allow_html=True)
                         st.caption(f"Owner: {row.get('Responsible (Name)', '—')}")
 
                         k = f"wp_{row_number}"
-                        status_col, due_col, save_col = st.columns([1.5, 1.2, 0.8])
-                        new_status = status_col.selectbox(
-                            "Status", STATUS_OPTIONS,
-                            index=STATUS_OPTIONS.index(row["Status"]) if row["Status"] in STATUS_OPTIONS else 0,
-                            key=f"status_{k}",
-                        )
+                        due_col, save_col = st.columns([1.6, 0.8])
                         current_end = str(row.get("End Date", "") or "").strip()
                         try:
                             end_default = pd.to_datetime(current_end).date() if current_end else None
@@ -98,11 +93,9 @@ for i, wp in enumerate(wp_list):
                         new_end = due_col.date_input("Due date", value=end_default, key=f"end_{k}")
 
                         with save_col:
-                            st.write("")  # vertical spacer so the button lines up with the inputs
+                            st.write("")  # vertical spacer so the button lines up with the input
                             if st.button("💾 Save", key=f"save_{k}", use_container_width=True):
                                 try:
-                                    if new_status != row["Status"]:
-                                        update_activity_cell(row_number, "Status", new_status, user)
                                     if new_end and new_end.isoformat() != current_end:
                                         update_activity_cell(row_number, "End Date", new_end.isoformat(), user)
                                     st.success("Saved ✅")

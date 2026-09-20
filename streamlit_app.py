@@ -5,17 +5,69 @@ import plotly.express as px
 import pandas as pd
 
 from utils.auth import login_gate
-from utils.style import inject_base_style, sidebar_user_box, COLORS
+from utils.style import inject_base_style, sidebar_user_box, COLORS, MASAR_LOGO_PATH
 from utils.sheets import load_activities
 from utils.compute import enrich, kpis
+from utils.constants import PROJECT_NAME, PROJECT_END_DATE, INTERNAL_DEADLINE
 
 st.set_page_config(page_title="Navigator (MASAR) — Overview", page_icon="🧭", layout="wide")
 inject_base_style()
 login_gate()  # stops here if nobody is logged in
 sidebar_user_box()  # the one fixed logo/header for the whole app — never repeated on the page itself
 
-st.title("Project Overview")
-st.caption("Labour Mobility Navigator (MASAR) status dashboard — live data from Google Sheets")
+# ---------- Hero: big logo + big project name ----------
+hero_logo, hero_text = st.columns([1, 3.4])
+with hero_logo:
+    st.image(str(MASAR_LOGO_PATH), use_container_width=True)
+with hero_text:
+    st.markdown(
+        f"""
+        <div style="height:100%;display:flex;flex-direction:column;justify-content:center;">
+          <div style="font-size:42px;font-weight:800;color:{COLORS['navy']};line-height:1.05;">{PROJECT_NAME}</div>
+          <div style="font-size:15px;color:{COLORS['ink']};margin-top:6px;">
+            CeLAPI · German Jordanian University — live status dashboard from Google Sheets
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# ---------- Project end date + countdown ----------
+days_left = (PROJECT_END_DATE - datetime.date.today()).days
+if days_left >= 0:
+    counter_value, counter_label = days_left, "days left"
+    counter_color = COLORS["critical"] if days_left <= 14 else (COLORS["warning"] if days_left <= 30 else COLORS["teal"])
+else:
+    counter_value, counter_label = abs(days_left), "days past the project end date"
+    counter_color = COLORS["critical"]
+
+st.markdown(
+    f"""
+    <div class="nav-card" style="margin-top:16px;display:flex;justify-content:space-between;
+                                  align-items:center;flex-wrap:wrap;gap:16px;">
+      <div>
+        <div style="font-size:12px;color:{COLORS['ink']};font-weight:700;text-transform:uppercase;letter-spacing:.04em;">
+          Project end date
+        </div>
+        <div style="font-size:22px;font-weight:800;color:{COLORS['navy']};margin-top:2px;">
+          {PROJECT_END_DATE.strftime('%d %B %Y')}
+        </div>
+        <div style="font-size:12px;color:{COLORS['ink']};margin-top:2px;">
+          Internal deadline: {INTERNAL_DEADLINE.strftime('%d %B %Y')} (2-week buffer)
+        </div>
+      </div>
+      <div style="text-align:center;min-width:120px;">
+        <div style="font-size:36px;font-weight:800;color:{counter_color};line-height:1;">{counter_value}</div>
+        <div style="font-size:12px;color:{COLORS['ink']};font-weight:700;">{counter_label}</div>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.divider()
+st.subheader("Project Overview")
+st.caption("Status dashboard — live data from Google Sheets")
 
 with st.spinner("Loading data..."):
     df = enrich(load_activities())

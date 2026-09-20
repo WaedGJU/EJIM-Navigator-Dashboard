@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from utils.auth import login_gate, current_user
-from utils.style import inject_base_style, sidebar_user_box, COLORS
+from utils.style import inject_base_style, sidebar_user_box, COLORS, status_badge_html
 from utils.sheets import load_activities, load_users, update_activity_cell, ConflictError
 from utils.compute import enrich
 
@@ -13,16 +13,14 @@ sidebar_user_box()
 
 st.title("Team")
 st.caption("Progress per person. Editing is open to everyone here — anyone can update any activity's "
-           "start/end dates, status, owner, or mark it Done. Every change is written to the Edit Log "
-           "with who did it and when, so there's no need for a separate permission check.")
+           "start/end dates, owner, or mark it Done. Every change is written to the Edit Log with who "
+           "did it and when, so there's no need for a separate permission check. Status is never picked "
+           "manually — it's computed automatically from the Done flag and the dates.")
 
 user = current_user()
 df = enrich(load_activities())
 if df.empty:
     st.stop()
-
-STATUS_OPTIONS = ["Not started", "In Progress", "Completed", "On Hold",
-                   "Unconfirmed - needs update", "Proposed - Pending Validation"]
 
 people = sorted(df["Responsible (Name)"].dropna().astype(str).str.strip().unique())
 people = [p for p in people if p]
@@ -77,8 +75,9 @@ for person in people:
                 c1, c2 = st.columns([2, 1])
                 with c1:
                     st.markdown(f"**{row['Activity']}**")
-                    st.caption(f"{row['Original WP']} · Current status: {row['Status']}")
+                    st.caption(f"{row['Original WP']}")
                 with c2:
+                    st.markdown(status_badge_html(row["AutoStatus"]), unsafe_allow_html=True)
                     if row.get("is_overdue"):
                         st.error(f"{int(row['days_overdue'])} days overdue")
                     elif row.get("is_atrisk"):
@@ -88,16 +87,11 @@ for person in people:
                 current_owner = str(row.get("Responsible (Name)", "")).strip()
                 owner_options = team_names if current_owner in team_names else [current_owner] + team_names
 
-                owner_col, status_col, done_col = st.columns([1.3, 1.6, 1])
+                owner_col, done_col = st.columns([2, 1])
                 new_owner = owner_col.selectbox(
                     "Owner", owner_options,
                     index=owner_options.index(current_owner) if current_owner in owner_options else 0,
                     key=f"owner_{k}",
-                )
-                new_status = status_col.selectbox(
-                    "Status", STATUS_OPTIONS,
-                    index=STATUS_OPTIONS.index(row["Status"]) if row["Status"] in STATUS_OPTIONS else 0,
-                    key=f"status_{k}",
                 )
                 current_team_update = str(row.get("Team Update", "") or "").strip()
                 done_checked = done_col.checkbox(
@@ -112,8 +106,6 @@ for person in people:
 
                 if st.button("💾 Save", key=f"save_{k}"):
                     try:
-                        if new_status != row["Status"]:
-                            update_activity_cell(row_number, "Status", new_status, user)
                         new_team_update = "Done" if done_checked else ""
                         if new_team_update != current_team_update and "Team Update" in df.columns:
                             update_activity_cell(row_number, "Team Update", new_team_update, user)
