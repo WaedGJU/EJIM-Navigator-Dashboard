@@ -30,6 +30,7 @@ PAGES = [
 ]
 if is_admin():
     PAGES.append(st.Page("pages/7_🔐_Admin_Reports.py", title="Admin Reports", icon="🔐"))
+    PAGES.append(st.Page("pages/9_🛠️_Admin_Users.py", title="Admin · Users", icon="🛠️"))
 
 nav = st.navigation(PAGES, position="top")
 top_user_bar()

@@ -67,6 +67,10 @@ def clear_activity_cache():
     load_activities.clear()
 
 
+def clear_users_cache():
+    load_users.clear()
+
+
 # ---------------------------------------------------------------------------
 # Writes — one cell at a time, never overwrite the whole sheet (avoids
 # clobbering someone else's concurrent edit)
@@ -145,6 +149,82 @@ class ConflictError(Exception):
     """Raised when two people try to edit the same row at roughly the same moment."""
     pass
 
+
+# ---------------------------------------------------------------------------
+# Users tab — writes for the Admin · Users page (reset PIN, add user,
+# unlock/activate). Kept here so ALL Google Sheets access still lives in this
+# one file. Any column that doesn't exist yet (e.g. the lockout columns
+# Failed_Attempts / Locked_Until) is created automatically the first time it
+# is written, so nothing has to be added to the sheet by hand.
+# ---------------------------------------------------------------------------
+
+def _ensure_columns(ws, needed) -> list:
+    """Make sure each column name in `needed` exists in the header row (row 1);
+    append any that are missing to the end. Returns the up-to-date header list.
+    Uses update_cell only, so it works the same across gspread versions."""
+    header = ws.row_values(1)
+    for col in needed:
+        if col not in header:
+            header.append(col)
+            ws.update_cell(1, len(header), col)  # write the new header cell at the end
+    return header
+
+
+def _find_user_row(ws, email: str):
+    """(row_number, header) for the user whose Email matches (case-insensitive),
+    or (None, header) if there's no such user. row_number is the real 1-based
+    row inside the Google Sheet."""
+    values = ws.get_all_values()
+    if not values:
+        return None, []
+    header = values[0]
+    if "Email" not in header:
+        return None, header
+    ecol = header.index("Email")
+    target = str(email).strip().lower()
+    for i, row in enumerate(values[1:], start=2):
+        if len(row) > ecol and str(row[ecol]).strip().lower() == target:
+            return i, header
+    return None, header
+
+
+def user_exists(email: str) -> bool:
+    ws = _ws(USERS_SHEET)
+    row, _ = _find_user_row(ws, email)
+    return row is not None
+
+
+def update_user_cell(email: str, column: str, value):
+    """Set a single cell for the user with this email. Creates the column if it
+    doesn't exist yet. Raises ValueError if there's no matching user."""
+    ws = _ws(USERS_SHEET)
+    row, header = _find_user_row(ws, email)
+    if row is None:
+        raise ValueError(f"No user found with email: {email}")
+    if column not in header:
+        header = _ensure_columns(ws, [column])
+    col_idx = header.index(column) + 1
+    ws.update_cell(row, col_idx, value)
+    clear_users_cache()
+
+
+def append_user_row(values: dict):
+    """Append a brand-new user row, matched to the sheet's own header so each
+    value lands in the right column regardless of order. Any key not already a
+    column is added to the header first."""
+    ws = _ws(USERS_SHEET)
+    header = ws.row_values(1)
+    missing = [k for k in values if k not in header]
+    if missing:
+        header = _ensure_columns(ws, missing)
+    row = [values.get(col, "") for col in header]
+    ws.append_row(row, value_input_option="USER_ENTERED")
+    clear_users_cache()
+
+
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
 
 def append_edit_log(user: dict, row_number: int, column_name: str, old_value, new_value):
     now = now_jordan().strftime("%Y-%m-%d %H:%M:%S")
