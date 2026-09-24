@@ -57,6 +57,42 @@ def record_change(activity: str, wp: str, field: str, old_value, new_value):
     })
 
 
+# ---- Keep attendance + general notes alive across page switches ----
+# Streamlit deletes a widget's session_state entry as soon as a run happens
+# where that widget isn't drawn (i.e. the user opens another page tab). So
+# each value is mirrored into a plain "_keep_" key that Streamlit never
+# touches, and restored into the widget key before the widget is drawn.
+ATTEND_KEYS = ["attend_select_all", "attend_extra_names"] + [f"attend_{n}" for n in FIXED_ATTENDANCE_ROSTER]
+NOTES_KEY = "mp_general_notes"
+PERSISTED_KEYS = ATTEND_KEYS + [NOTES_KEY]
+
+
+def _restore_persisted():
+    for k in PERSISTED_KEYS:
+        keep = f"_keep_{k}"
+        if k not in st.session_state and keep in st.session_state:
+            st.session_state[k] = st.session_state[keep]
+
+
+def _remember(keys):
+    for k in keys:
+        if k in st.session_state:
+            st.session_state[f"_keep_{k}"] = st.session_state[k]
+
+
+def _clear_attendance():
+    for k in ATTEND_KEYS:
+        st.session_state[k] = "" if k == "attend_extra_names" else False
+    _remember(ATTEND_KEYS)
+
+
+def _clear_general_notes():
+    st.session_state[NOTES_KEY] = ""
+    _remember([NOTES_KEY])
+
+
+_restore_persisted()
+
 st.title("Meeting Prep")
 st.caption("Everything the team needs ahead of the Sunday / Tuesday meeting — review, edit straight "
            "onto Google Sheets, take attendance, and export the signed minutes as a PDF.")
@@ -129,7 +165,7 @@ attendance = []
 att_cols = st.columns(4)
 for i, name in enumerate(FIXED_ATTENDANCE_ROSTER):
     with att_cols[i % 4]:
-        present = st.checkbox(name, value=False, key=f"attend_{name}")
+        present = st.checkbox(name, key=f"attend_{name}")
         attendance.append((name, present))
 
 extra_names_raw = st.text_input(
@@ -139,6 +175,9 @@ extra_names_raw = st.text_input(
 )
 for extra_name in [n.strip() for n in extra_names_raw.split(",") if n.strip()]:
     attendance.append((extra_name, True))
+
+_remember(ATTEND_KEYS)
+st.button("🗑 Clear attendance", key="mp_clear_attendance", on_click=_clear_attendance)
 
 st.divider()
 
@@ -278,6 +317,9 @@ with st.form("mp_general_notes_form", border=False):
     st.form_submit_button("💾 Save notes", use_container_width=False)
 
 general_notes = st.session_state.get("mp_general_notes", "")
+_remember([NOTES_KEY])
+if general_notes:
+    st.button("🗑 Clear general notes", key="mp_clear_notes", on_click=_clear_general_notes)
 
 # Jordan time specifically, not the server's own clock — Streamlit Community
 # Cloud runs its servers on UTC, which would otherwise stamp the minutes

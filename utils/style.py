@@ -118,6 +118,30 @@ def inject_base_style():
             color: {COLORS['navy']} !important;
         }}
 
+        /* Visible frame around every text/number/date/select/textarea input.
+           The theme's secondaryBackgroundColor (input fill) is the same
+           #f6f8fa as the page background, so without an explicit border the
+           fields were invisible (e.g. email / PIN boxes on the login screen). */
+        div[data-baseweb="input"],
+        div[data-baseweb="textarea"],
+        div[data-baseweb="select"] > div {{
+            border: 1px solid #b9c0c8 !important;
+            border-radius: 8px !important;
+            background: #ffffff !important;
+        }}
+        div[data-baseweb="input"] > div,
+        div[data-baseweb="base-input"],
+        div[data-baseweb="input"] input,
+        div[data-baseweb="textarea"] textarea {{
+            background: #ffffff !important;
+        }}
+        div[data-baseweb="input"]:focus-within,
+        div[data-baseweb="textarea"]:focus-within,
+        div[data-baseweb="select"] > div:focus-within {{
+            border-color: {COLORS['teal']} !important;
+            box-shadow: 0 0 0 1px {COLORS['teal']} !important;
+        }}
+
         /* Links and other native widget accents default to Streamlit's theme
            blue when unset — pin them to brand teal/orange instead. */
         a, a:visited {{ color: {COLORS['teal']}; }}
