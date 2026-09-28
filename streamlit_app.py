@@ -27,6 +27,7 @@ PAGES = [
     st.Page("pages/5_📋_Full_Registry.py", title="Full Registry", icon="📋"),
     st.Page("pages/6_🗓️_Meeting_Prep.py", title="Meeting Prep", icon="🗓️"),
     st.Page("pages/8_➕_Add_Activity.py", title="Add Activity", icon="➕"),
+    st.Page("pages/10_🐞_Bugs_Log.py", title="Bugs Log", icon="🐞"),
 ]
 if is_admin():
     PAGES.append(st.Page("pages/7_🔐_Admin_Reports.py", title="Admin Reports", icon="🔐"))

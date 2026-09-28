@@ -247,3 +247,133 @@ def load_login_log() -> pd.DataFrame:
 @st.cache_data(ttl=15, show_spinner=False)
 def load_edit_log() -> pd.DataFrame:
     return pd.DataFrame(_ws(EDIT_LOG_SHEET).get_all_records())
+
+
+# ---------------------------------------------------------------------------
+# Bugs Log — the team reports problems they hit in the app. Two tabs, both
+# created automatically the first time they're needed (nothing to set up by
+# hand in the Google Sheet):
+#   Bugs_Log   → one row per bug (who / when / page / description / status)
+#   Bug_Images → the optional screenshot, stored as compressed JPEG text split
+#                across rows (a single Google Sheets cell holds max 50,000
+#                characters). Kept inside the same Google Sheet on purpose, so
+#                no extra Google Drive folder, permission or quota is needed.
+# ---------------------------------------------------------------------------
+
+BUGS_SHEET = "Bugs_Log"
+BUG_IMAGES_SHEET = "Bug_Images"
+
+BUG_COLUMNS = [
+    "Bug_ID", "Reported_At", "Reported_By", "Reported_By_Email", "Page",
+    "Description", "Status", "Has_Screenshot", "Solved_By", "Solved_At",
+    "Last_Updated_By", "Last_Updated_At",
+]
+BUG_IMAGE_COLUMNS = ["Bug_ID", "Part", "Data"]
+_IMAGE_CHUNK = 45_000  # safely under the 50,000-character cell limit
+
+
+def _ws_or_create(name: str, columns: list):
+    """Open a worksheet, creating it (with its header row) if it doesn't exist yet.
+    Also adds any header columns that are missing from an existing tab."""
+    ss = _spreadsheet()
+    try:
+        ws = ss.worksheet(name)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = ss.add_worksheet(title=name, rows=200, cols=max(len(columns), 5))
+        ws.update_cell(1, 1, columns[0])
+        for i, col in enumerate(columns[1:], start=2):
+            ws.update_cell(1, i, col)
+        return ws
+    _ensure_columns(ws, columns)
+    return ws
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def load_bugs() -> pd.DataFrame:
+    ws = _ws_or_create(BUGS_SHEET, BUG_COLUMNS)
+    df = pd.DataFrame(ws.get_all_records())
+    if df.empty:
+        return pd.DataFrame(columns=BUG_COLUMNS)
+    return df
+
+
+def clear_bugs_cache():
+    load_bugs.clear()
+    load_bug_image.clear()
+
+
+def get_next_bug_id() -> str:
+    df = load_bugs()
+    nums = pd.to_numeric(
+        df["Bug_ID"].astype(str).str.extract(r"(\d+)")[0], errors="coerce"
+    ).dropna() if not df.empty else pd.Series(dtype=float)
+    n = int(nums.max()) + 1 if not nums.empty else 1
+    return f"BUG-{n:03d}"
+
+
+def append_bug(page: str, description: str, user: dict, image_b64: str = "") -> str:
+    """Adds a new bug (status Open) and, if given, its screenshot. Returns the Bug_ID."""
+    ws = _ws_or_create(BUGS_SHEET, BUG_COLUMNS)
+    header = ws.row_values(1)
+    bug_id = get_next_bug_id()
+    now = now_jordan().strftime("%Y-%m-%d %H:%M:%S")
+    values = {
+        "Bug_ID": bug_id,
+        "Reported_At": now,
+        "Reported_By": user["name"],
+        "Reported_By_Email": user["email"],
+        "Page": page,
+        "Description": description,
+        "Status": "Open",
+        "Has_Screenshot": "Yes" if image_b64 else "No",
+        "Last_Updated_By": user["name"],
+        "Last_Updated_At": now,
+    }
+    ws.append_row([values.get(c, "") for c in header], value_input_option="RAW")
+
+    if image_b64:
+        img_ws = _ws_or_create(BUG_IMAGES_SHEET, BUG_IMAGE_COLUMNS)
+        chunks = [image_b64[i:i + _IMAGE_CHUNK] for i in range(0, len(image_b64), _IMAGE_CHUNK)]
+        img_ws.append_rows([[bug_id, i + 1, c] for i, c in enumerate(chunks)],
+                           value_input_option="RAW")
+
+    clear_bugs_cache()
+    return bug_id
+
+
+def update_bug_status(bug_id: str, new_status: str, user: dict):
+    """Changes a bug's status; stamps Solved_By/Solved_At when it becomes Solved
+    (and clears them if it's re-opened)."""
+    ws = _ws_or_create(BUGS_SHEET, BUG_COLUMNS)
+    values = ws.get_all_values()
+    header = values[0]
+    id_col = header.index("Bug_ID")
+    row = next((i for i, r in enumerate(values[1:], start=2)
+                if len(r) > id_col and r[id_col] == bug_id), None)
+    if row is None:
+        raise ValueError(f"Bug not found: {bug_id}")
+
+    now = now_jordan().strftime("%Y-%m-%d %H:%M:%S")
+    solved = new_status == "Solved"
+    updates = {
+        "Status": new_status,
+        "Solved_By": user["name"] if solved else "",
+        "Solved_At": now if solved else "",
+        "Last_Updated_By": user["name"],
+        "Last_Updated_At": now,
+    }
+    for col, val in updates.items():
+        ws.update_cell(row, header.index(col) + 1, val)
+    clear_bugs_cache()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_bug_image(bug_id: str) -> str:
+    """The screenshot for one bug as a base64 JPEG string ('' if none)."""
+    try:
+        ws = _spreadsheet().worksheet(BUG_IMAGES_SHEET)
+    except gspread.exceptions.WorksheetNotFound:
+        return ""
+    parts = [(int(r[1]), r[2]) for r in ws.get_all_values()[1:]
+             if len(r) >= 3 and r[0] == bug_id]
+    return "".join(p for _, p in sorted(parts))

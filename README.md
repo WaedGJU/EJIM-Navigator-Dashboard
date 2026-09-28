@@ -17,6 +17,7 @@ pages/5_📋_Full_Registry.py       Filterable table of all activities, CSV expo
 pages/6_🗓️_Meeting_Prep.py        Meeting countdown, attendance checklist, live agenda editing, PDF minutes export
 pages/7_🔐_Admin_Reports.py       Admin-only: login history and edit history
 pages/8_➕_Add_Activity.py        Add a brand-new activity to the registry, with validation, from the app
+pages/10_🐞_Bugs_Log.py          "Bugs Log" tab — team reports app bugs (description, page, screenshot), Open/Solved status
 utils/sheets.py                  All Google Sheets reads/writes (incl. appending new activities)
 utils/auth.py                    Email + PIN login, lockout, roles, login-page branding
 utils/compute.py                 Status bucketing, delayed/at-risk/not-started/unassigned + AutoStatus
@@ -155,3 +156,14 @@ definitions — it's meant as a working starting point, not a final spec.
 `utils/constants.py` holds `PROJECT_NAME`, `PROJECT_END_DATE` (31 Oct 2026) and `INTERNAL_DEADLINE`
 (17 Oct 2026, a 2-week buffer) — both the home-page countdown and the meeting-minutes PDF read from
 here, so update this one file if the project's dates ever change.
+
+
+## Bugs Log tab
+
+- Anyone logged in can report a bug: the page where it happened, a description, and an optional
+  screenshot. New bugs start as **Open** (the problem still exists); anyone can switch a bug to
+  **Solved** from the dropdown — the app stamps `Solved_By` / `Solved_At` (cleared again if re-opened).
+- Saved in the same Google Sheet, in two tabs the app **creates automatically** the first time:
+  `Bugs_Log` (one row per bug) and `Bug_Images` (the screenshot, compressed to JPEG and stored as text
+  split across rows, since one cell holds max 50,000 characters). No Google Drive folder or extra
+  permission is needed. Screenshots are viewed inside the app's Bugs Log tab, not in the sheet itself.
