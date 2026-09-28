@@ -163,10 +163,17 @@ def _ensure_columns(ws, needed) -> list:
     append any that are missing to the end. Returns the up-to-date header list.
     Uses update_cell only, so it works the same across gspread versions."""
     header = ws.row_values(1)
-    for col in needed:
-        if col not in header:
-            header.append(col)
-            ws.update_cell(1, len(header), col)  # write the new header cell at the end
+    missing = [c for c in needed if c not in header]
+    if not missing:
+        return header
+    # Widen the tab first if the new headers would land past its last column
+    # (writing outside the grid is rejected by the Google Sheets API).
+    extra = len(header) + len(missing) - ws.col_count
+    if extra > 0:
+        ws.add_cols(extra)
+    for col in missing:
+        header.append(col)
+        ws.update_cell(1, len(header), col)  # write the new header cell at the end
     return header
 
 
@@ -281,7 +288,7 @@ def _ws_or_create(name: str, columns: list):
     try:
         ws = ss.worksheet(name)
     except gspread.exceptions.WorksheetNotFound:
-        ws = ss.add_worksheet(title=name, rows=200, cols=max(len(columns), 5))
+        ws = ss.add_worksheet(title=name, rows=200, cols=max(len(columns), 26))
         ws.update_cell(1, 1, columns[0])
         for i, col in enumerate(columns[1:], start=2):
             ws.update_cell(1, i, col)
