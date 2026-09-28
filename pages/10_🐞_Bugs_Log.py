@@ -1,5 +1,5 @@
-"""Bugs Log — anyone on the team can report a problem they hit in the app,
-attach a screenshot, and mark it Solved once it's fixed. Everything is saved
+"""Bugs Log — anyone on the team can report a problem they find on the
+Navigator (MASAR) platform, attach a screenshot, and mark it Solved once it's fixed. Everything is saved
 to the Bugs_Log / Bug_Images tabs of the same Google Sheet (see utils/sheets.py)."""
 
 import base64
@@ -13,10 +13,15 @@ from utils.sheets import load_bugs, append_bug, update_bug_status, load_bug_imag
 
 STATUSES = ["Open", "Solved"]  # "Open" = the problem still exists
 STATUS_ICON = {"Open": "🔴", "Solved": "🟢"}
-PAGES = [
-    "Project Overview", "Work Packages", "Team", "Critical Follow-up", "External Partners",
-    "Full Registry", "Meeting Prep", "Add Activity", "Admin Reports", "Admin · Users",
-    "Login", "Other",
+NAVIGATOR_URL = "https://10.115.0.136/ar/"
+PATHWAYS = [
+    "Study in Germany", "Work and Vocational Training", "Qualification Recognition",
+    "Language Improvement", "Visa Preparation", "Homepage / General", "Other",
+]
+LANGUAGES = ["Arabic", "English", "Both"]
+BUG_TYPES = [
+    "Wrong / unclear text", "Translation", "Broken branch / next question",
+    "Broken link / page not loading", "Design / layout", "Technical error", "Other",
 ]
 MAX_B64_CHARS = 400_000  # ~300 KB image once compressed — keeps the sheet light
 
@@ -40,18 +45,24 @@ def compress_screenshot(uploaded) -> str:
 
 
 st.title("Bugs Log")
-st.caption("Hit a problem in the app? Log it here so it gets fixed. It's saved straight to the "
-           "Google Sheet (Bugs_Log tab). Set the status to **Solved** once it's fixed.")
+st.caption(f"Found a problem on the [Navigator platform]({NAVIGATOR_URL})? Log it here so it gets fixed. "
+           "It's saved straight to the Google Sheet (Bugs_Log tab). Set the status to **Solved** once it's fixed.")
 
 user = current_user()
 
 # --------------------------------------------------------------------------- report
 with st.expander("➕ Report a new bug", expanded=False):
     with st.form("new_bug_form", clear_on_submit=True):
-        page = st.selectbox("Where did it happen? *", PAGES)
+        c1, c2, c3 = st.columns(3)
+        pathway = c1.selectbox("Pathway / section *", PATHWAYS)
+        language = c2.selectbox("Language version *", LANGUAGES)
+        bug_type = c3.selectbox("Bug type *", BUG_TYPES)
+        c4, c5 = st.columns([1, 2])
+        q_code = c4.text_input("Question code (optional)", placeholder="e.g. Q3-AUS")
+        page_url = c5.text_input("Page link (optional)", placeholder=NAVIGATOR_URL)
         description = st.text_area(
             "Describe the problem *", height=120,
-            placeholder="What did you do, what did you expect, and what happened instead?",
+            placeholder="What did you do on the Navigator, what did you expect, and what happened instead?",
         )
         shot = st.file_uploader("Screenshot of the error (optional)", type=["png", "jpg", "jpeg", "webp"])
         submitted = st.form_submit_button("🐞 Submit bug", use_container_width=True)
@@ -67,7 +78,14 @@ with st.expander("➕ Report a new bug", expanded=False):
                 st.warning("The screenshot couldn't be read, so the bug was saved without it.")
             try:
                 with st.spinner("Saving…"):
-                    bug_id = append_bug(page, description.strip(), user, image_b64)
+                    bug_id = append_bug({
+                        "Pathway": pathway,
+                        "Language": language,
+                        "Bug_Type": bug_type,
+                        "Question_Code": q_code.strip(),
+                        "Page_URL": page_url.strip(),
+                        "Description": description.strip(),
+                    }, user, image_b64)
                 st.success(f"Logged as **{bug_id}** ✅ Thank you!")
             except Exception as e:
                 st.error(f"Couldn't write to Google Sheets: {e}")
@@ -86,19 +104,22 @@ k1.metric("Total reported", len(df))
 k2.metric("🔴 Still open", open_n)
 k3.metric("🟢 Solved", solved_n)
 
-c1, c2, c3 = st.columns([1, 1, 2])
+c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
 f_status = c1.multiselect("Status", STATUSES, default=["Open"])
-f_page = c2.multiselect("Page", sorted(df["Page"].astype(str).unique()))
-search = c3.text_input("Search description / reporter")
+f_path = c2.multiselect("Pathway", sorted(df["Pathway"].astype(str).unique()))
+f_type = c3.multiselect("Bug type", sorted(df["Bug_Type"].astype(str).unique()))
+search = c4.text_input("Search description / question code / reporter")
 
 view = df.copy()
 if f_status:
     view = view[view["Status"].isin(f_status)]
-if f_page:
-    view = view[view["Page"].astype(str).isin(f_page)]
+if f_path:
+    view = view[view["Pathway"].astype(str).isin(f_path)]
+if f_type:
+    view = view[view["Bug_Type"].astype(str).isin(f_type)]
 if search:
     s = search.lower()
-    view = view[view.apply(lambda r: s in f"{r['Description']} {r['Reported_By']}".lower(), axis=1)]
+    view = view[view.apply(lambda r: s in f"{r['Description']} {r['Question_Code']} {r['Reported_By']}".lower(), axis=1)]
 
 view = view.sort_values("Reported_At", ascending=False)
 st.caption(f"{len(view)} of {len(df)} bugs")
@@ -107,9 +128,13 @@ for _, bug in view.iterrows():
     bug_id = str(bug["Bug_ID"])
     status = bug["Status"] if bug["Status"] in STATUSES else "Open"
     first_line = str(bug["Description"]).splitlines()[0][:90] if str(bug["Description"]) else ""
-    label = f"{STATUS_ICON[status]} {bug_id} · {bug['Page']} · {first_line}"
+    code = f" · {bug['Question_Code']}" if str(bug.get("Question_Code", "")) else ""
+    label = f"{STATUS_ICON[status]} {bug_id} · {bug['Pathway']} ({bug['Language']}){code} · {first_line}"
     with st.expander(label):
-        st.markdown(f"**Reported by** {bug['Reported_By']} · {bug['Reported_At']}")
+        st.markdown(f"**Reported by** {bug['Reported_By']} · {bug['Reported_At']}  \n"
+                    f"**Type:** {bug['Bug_Type']} · **Language:** {bug['Language']}")
+        if str(bug.get("Page_URL", "")):
+            st.markdown(f"🔗 [Open the page on the Navigator]({bug['Page_URL']})")
         st.write(bug["Description"])
         if status == "Solved" and str(bug.get("Solved_By", "")):
             st.caption(f"Solved by {bug['Solved_By']} · {bug['Solved_At']}")

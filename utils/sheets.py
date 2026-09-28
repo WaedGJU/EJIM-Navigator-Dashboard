@@ -250,7 +250,9 @@ def load_edit_log() -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Bugs Log — the team reports problems they hit in the app. Two tabs, both
+# Bugs Log — the team reports problems they find on the Navigator (MASAR)
+# platform itself (wrong text, broken pathway branches, translation mistakes,
+# layout / technical errors…). Two tabs, both
 # created automatically the first time they're needed (nothing to set up by
 # hand in the Google Sheet):
 #   Bugs_Log   → one row per bug (who / when / page / description / status)
@@ -264,8 +266,8 @@ BUGS_SHEET = "Bugs_Log"
 BUG_IMAGES_SHEET = "Bug_Images"
 
 BUG_COLUMNS = [
-    "Bug_ID", "Reported_At", "Reported_By", "Reported_By_Email", "Page",
-    "Description", "Status", "Has_Screenshot", "Solved_By", "Solved_At",
+    "Bug_ID", "Reported_At", "Reported_By", "Reported_By_Email", "Pathway",
+    "Language", "Bug_Type", "Question_Code", "Page_URL", "Description", "Status", "Has_Screenshot", "Solved_By", "Solved_At",
     "Last_Updated_By", "Last_Updated_At",
 ]
 BUG_IMAGE_COLUMNS = ["Bug_ID", "Part", "Data"]
@@ -311,24 +313,25 @@ def get_next_bug_id() -> str:
     return f"BUG-{n:03d}"
 
 
-def append_bug(page: str, description: str, user: dict, image_b64: str = "") -> str:
-    """Adds a new bug (status Open) and, if given, its screenshot. Returns the Bug_ID."""
+def append_bug(details: dict, user: dict, image_b64: str = "") -> str:
+    """Adds a new bug (status Open) and, if given, its screenshot. `details` holds
+    Pathway / Language / Bug_Type / Question_Code / Page_URL / Description.
+    Returns the new Bug_ID."""
     ws = _ws_or_create(BUGS_SHEET, BUG_COLUMNS)
     header = ws.row_values(1)
     bug_id = get_next_bug_id()
     now = now_jordan().strftime("%Y-%m-%d %H:%M:%S")
-    values = {
+    values = dict(details)
+    values.update({
         "Bug_ID": bug_id,
         "Reported_At": now,
         "Reported_By": user["name"],
         "Reported_By_Email": user["email"],
-        "Page": page,
-        "Description": description,
         "Status": "Open",
         "Has_Screenshot": "Yes" if image_b64 else "No",
         "Last_Updated_By": user["name"],
         "Last_Updated_At": now,
-    }
+    })
     ws.append_row([values.get(c, "") for c in header], value_input_option="RAW")
 
     if image_b64:

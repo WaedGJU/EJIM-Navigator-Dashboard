@@ -17,7 +17,7 @@ pages/5_📋_Full_Registry.py       Filterable table of all activities, CSV expo
 pages/6_🗓️_Meeting_Prep.py        Meeting countdown, attendance checklist, live agenda editing, PDF minutes export
 pages/7_🔐_Admin_Reports.py       Admin-only: login history and edit history
 pages/8_➕_Add_Activity.py        Add a brand-new activity to the registry, with validation, from the app
-pages/10_🐞_Bugs_Log.py          "Bugs Log" tab — team reports app bugs (description, page, screenshot), Open/Solved status
+pages/10_🐞_Bugs_Log.py          "Bugs Log" tab — team reports bugs found on the Navigator platform (pathway, language, type, screenshot), Open/Solved
 utils/sheets.py                  All Google Sheets reads/writes (incl. appending new activities)
 utils/auth.py                    Email + PIN login, lockout, roles, login-page branding
 utils/compute.py                 Status bucketing, delayed/at-risk/not-started/unassigned + AutoStatus
@@ -160,7 +160,9 @@ here, so update this one file if the project's dates ever change.
 
 ## Bugs Log tab
 
-- Anyone logged in can report a bug: the page where it happened, a description, and an optional
+- For bugs found on the **Navigator (MASAR) platform itself** (https://10.115.0.136/ar/), not the
+  dashboard. Anyone logged in can report one: pathway / section, language version (Arabic / English /
+  Both), bug type, optional question code (e.g. Q3-AUS) and page link, a description, and an optional
   screenshot. New bugs start as **Open** (the problem still exists); anyone can switch a bug to
   **Solved** from the dropdown — the app stamps `Solved_By` / `Solved_At` (cleared again if re-opened).
 - Saved in the same Google Sheet, in two tabs the app **creates automatically** the first time:
