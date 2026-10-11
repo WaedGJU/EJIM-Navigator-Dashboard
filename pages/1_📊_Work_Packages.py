@@ -1,3 +1,5 @@
+from html import escape
+
 import streamlit as st
 import plotly.express as px
 
@@ -5,6 +7,7 @@ from utils.style import COLORS, status_badge_html
 from utils.sheets import load_activities
 from utils.compute import enrich
 from utils.activity_editor import activity_editor, activity_key, can_edit, wp_options, team_options
+from utils.pathways import STEPS, pathway_progress
 
 st.title("Work Packages (WP1–WP9)")
 st.caption("Every work package as a progress card — open one to see its activities. "
@@ -18,6 +21,62 @@ if df.empty:
 
 wps = wp_options(df)
 team_names = team_options(df)
+
+# ---------- Pathway progress: which of the 9 content steps each pathway is on ----------
+STEP_COLORS = {"done": COLORS["good"], "current": COLORS["progress"], "todo": "#eef0f3"}
+
+
+def _pathway_bar_html(p: dict) -> str:
+    segments = ""
+    for i, s in enumerate(p["steps"], start=1):
+        state = s["state"]
+        if state == "current" and p["overdue"]:
+            bg, fg = COLORS["critical"], "#fff"
+        elif state == "missing":
+            bg, fg = "transparent", COLORS["ink"]
+        else:
+            bg, fg = STEP_COLORS[state], "#fff" if state in ("done", "current") else COLORS["ink"]
+        border = f"1.5px dashed {COLORS['neutral']}" if state == "missing" else "none"
+        tip = escape(f"{i}. {s['label']}" + (" (no activity in the registry)" if state == "missing" else ""))
+        segments += (f'<div title="{tip}" style="flex:1;height:22px;border-radius:5px;background:{bg};'
+                     f'border:{border};color:{fg};font-size:11px;font-weight:700;display:flex;'
+                     f'align-items:center;justify-content:center;">{i}</div>')
+
+    if p["current"] is None:
+        stage = f'<span style="color:{COLORS["good"]};font-weight:800;">All 9 steps done ✓</span>'
+    else:
+        cur = p["steps"][p["current"]]
+        owner = str(cur["activity"].get("Responsible (Name)", "") or cur["owner"])
+        stage = (f'Step {p["current"] + 1} of 9 · <b>{escape(cur["label"])}</b> · {escape(owner)}'
+                 + (f' · due {escape(p["due"])}' if p["due"] else ""))
+        if p["overdue"]:
+            stage += (f' <span class="nav-pill" style="background:#fbe7e7;color:{COLORS["critical"]};">'
+                      f'Delayed</span>')
+
+    return f"""
+    <div class="nav-card" style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
+        <div style="font-weight:800;color:{COLORS['navy']};font-size:15px;">{escape(p['pathway'])}</div>
+        <div style="font-weight:800;color:{COLORS['teal']};font-size:13px;">{p['done']}/9 steps</div>
+      </div>
+      <div style="display:flex;gap:4px;margin:10px 0 8px;">{segments}</div>
+      <div style="font-size:12.5px;color:{COLORS['ink']};">{stage}</div>
+    </div>
+    """
+
+
+st.subheader("Pathway progress")
+st.caption("Each MASAR pathway goes through the same 9 steps. Green = done, blue = the step it's on now "
+           "(red if that step is past its end date), grey = still to come. Hover a step to see its name.")
+progress = pathway_progress(df)
+p_cols = st.columns(2)
+for i, p in enumerate(progress):
+    with p_cols[i % 2]:
+        st.markdown(_pathway_bar_html(p), unsafe_allow_html=True)
+st.caption("Steps: " + " · ".join(f"{i}. {label} ({owner})" for i, (label, owner, _) in enumerate(STEPS, start=1)))
+
+st.divider()
+st.subheader("Work packages")
 
 wp_list = sorted(df["Original WP"].dropna().unique())
 cols = st.columns(3)
