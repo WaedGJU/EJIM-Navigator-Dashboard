@@ -106,7 +106,36 @@ def update_activity_cell(row_number: int, column_name: str, new_value, user: dic
         ws.update_cell(row_number, header.index("Last_Edited_At") + 1, now)
 
     append_edit_log(user, row_number, column_name, old_value, new_value)
+
+    # Ticking/unticking Done must also move the sheet's own Status column, so
+    # the raw Status shown in tables (Overview, Full Registry, External
+    # Partners) and in the sheet itself never disagrees with the Done flag.
+    if column_name == "Team Update" and "Status" in header:
+        _sync_status_with_done(ws, header, row_number, new_value, user)
+
     clear_activity_cache()
+
+
+def _sync_status_with_done(ws, header, row_number: int, team_update, user: dict):
+    status_col = header.index("Status") + 1
+    old_status = str(ws.cell(row_number, status_col).value or "").strip()
+
+    if str(team_update or "").strip().lower() == "done":
+        new_status = "Completed"
+    elif old_status.lower() == "completed":
+        # Done was unticked: fall back to a status based on the start date.
+        start_text = ""
+        if "Start Date" in header:
+            start_text = ws.cell(row_number, header.index("Start Date") + 1).value or ""
+        start = pd.to_datetime(start_text, errors="coerce")
+        today = pd.Timestamp(now_jordan().date())
+        new_status = "Not started" if pd.notna(start) and start > today else "In Progress"
+    else:
+        return
+
+    if new_status != old_status:
+        ws.update_cell(row_number, status_col, new_status)
+        append_edit_log(user, row_number, "Status", old_status, new_status)
 
 
 def get_next_activity_number() -> int:
