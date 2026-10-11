@@ -76,27 +76,49 @@ def clear_users_cache():
 # clobbering someone else's concurrent edit)
 # ---------------------------------------------------------------------------
 
-def update_activity_cell(row_number: int, column_name: str, new_value, user: dict):
-    """Updates a single activity cell, stamps Last_Edited_By / Last_Edited_At, and logs it."""
+def _norm_no(value) -> str:
+    """'208', 208 and 208.0 all compare equal as an activity No."""
+    text = str(value if value is not None else "").strip()
+    return text[:-2] if text.endswith(".0") else text
+
+
+def _locate_activity(ws, activity):
+    """Finds where `activity` (a row as loaded by load_activities, with its
+    No. and Activity name) sits in the sheet RIGHT NOW. Row numbers from when
+    a page loaded can't be trusted once rows get deleted — every row below a
+    deleted one moves up — so every write looks the activity up again first.
+    Returns (row_number, header, that row's values padded to the header)."""
+    values = ws.get_all_values()
+    header = values[0]
+    no_i, act_i = header.index("No."), header.index("Activity")
+    want_no = _norm_no(activity.get("No."))
+    want_name = str(activity.get("Activity", "")).strip()
+
+    matches = []
+    for row_number, row in enumerate(values[1:], start=2):
+        row = row + [""] * (len(header) - len(row))
+        if _norm_no(row[no_i]) == want_no and row[act_i].strip() == want_name:
+            matches.append((row_number, row))
+    if len(matches) != 1:
+        raise ConflictError(
+            "This activity changed or moved in the sheet since this page loaded. "
+            "Refresh the page and try again."
+        )
+    row_number, row = matches[0]
+    return row_number, header, row
+
+
+def update_activity_cell(activity, column_name: str, new_value, user: dict):
+    """Updates a single cell of `activity` (a row from load_activities), stamps
+    Last_Edited_By / Last_Edited_At, and logs it."""
     ws = _ws(ACTIVITY_SHEET)
-    header = ws.row_values(1)
+    row_number, header, row = _locate_activity(ws, activity)
 
     if column_name not in header:
         raise ValueError(f"Column not found in the sheet: {column_name}")
 
     col_idx = header.index(column_name) + 1
-    old_value = ws.cell(row_number, col_idx).value
-
-    # Simple conflict guard: make sure nobody else edited this row in the meantime
-    if "Last_Edited_At" in header:
-        stamp_col = header.index("Last_Edited_At") + 1
-        current_stamp = ws.cell(row_number, stamp_col).value
-        expected_stamp = st.session_state.get("row_stamps", {}).get(row_number)
-        if expected_stamp is not None and current_stamp != expected_stamp:
-            raise ConflictError(
-                "This row was just edited by someone else. Refresh the page and try again."
-            )
-
+    old_value = row[col_idx - 1]
     ws.update_cell(row_number, col_idx, new_value)
 
     now = now_jordan().strftime("%Y-%m-%d %H:%M:%S")
@@ -105,28 +127,27 @@ def update_activity_cell(row_number: int, column_name: str, new_value, user: dic
     if "Last_Edited_At" in header:
         ws.update_cell(row_number, header.index("Last_Edited_At") + 1, now)
 
-    append_edit_log(user, row_number, column_name, old_value, new_value)
+    activity_no = _norm_no(activity.get("No."))
+    append_edit_log(user, activity_no, column_name, old_value, new_value)
 
     # Ticking/unticking Done must also move the sheet's own Status column, so
     # the raw Status shown in tables (Overview, Full Registry, External
     # Partners) and in the sheet itself never disagrees with the Done flag.
     if column_name == "Team Update" and "Status" in header:
-        _sync_status_with_done(ws, header, row_number, new_value, user)
+        _sync_status_with_done(ws, header, row_number, row, activity_no, new_value, user)
 
     clear_activity_cache()
 
 
-def _sync_status_with_done(ws, header, row_number: int, team_update, user: dict):
+def _sync_status_with_done(ws, header, row_number: int, row: list, activity_no: str, team_update, user: dict):
     status_col = header.index("Status") + 1
-    old_status = str(ws.cell(row_number, status_col).value or "").strip()
+    old_status = str(row[status_col - 1] or "").strip()
 
     if str(team_update or "").strip().lower() == "done":
         new_status = "Completed"
     elif old_status.lower() == "completed":
         # Done was unticked: fall back to a status based on the start date.
-        start_text = ""
-        if "Start Date" in header:
-            start_text = ws.cell(row_number, header.index("Start Date") + 1).value or ""
+        start_text = row[header.index("Start Date")] if "Start Date" in header else ""
         start = pd.to_datetime(start_text, errors="coerce")
         today = pd.Timestamp(now_jordan().date())
         new_status = "Not started" if pd.notna(start) and start > today else "In Progress"
@@ -135,7 +156,7 @@ def _sync_status_with_done(ws, header, row_number: int, team_update, user: dict)
 
     if new_status != old_status:
         ws.update_cell(row_number, status_col, new_status)
-        append_edit_log(user, row_number, "Status", old_status, new_status)
+        append_edit_log(user, activity_no, "Status", old_status, new_status)
 
 
 def get_next_activity_number() -> int:
@@ -169,7 +190,7 @@ def append_activity_row(values: dict, user: dict) -> int:
     ws.append_row(row, value_input_option="USER_ENTERED")
     new_row_number = len(ws.get_all_values())  # the row we just appended lands last
 
-    append_edit_log(user, new_row_number, "New Activity", "—", row_values.get("Activity", ""))
+    append_edit_log(user, _norm_no(row_values.get("No.")), "New Activity", "—", row_values.get("Activity", ""))
     clear_activity_cache()
     return new_row_number
 
@@ -177,6 +198,30 @@ def append_activity_row(values: dict, user: dict) -> int:
 class ConflictError(Exception):
     """Raised when two people try to edit the same row at roughly the same moment."""
     pass
+
+
+DELETED_SHEET = "Deleted_Activities"
+
+
+def delete_activity(activity, user: dict):
+    """Removes `activity` (a row from load_activities) from the registry, after
+    first copying it in full to the Deleted_Activities tab (created
+    automatically) with who deleted it and when — so a mistaken delete can be
+    put back by hand. The row is looked up again by No. + name first, so the
+    wrong row is never hit even if rows moved since the page loaded."""
+    ws = _ws(ACTIVITY_SHEET)
+    row_number, header, row = _locate_activity(ws, activity)
+    values = dict(zip(header, row))
+
+    now = now_jordan().strftime("%Y-%m-%d %H:%M:%S")
+    archive = _ws_or_create(DELETED_SHEET, header + ["Deleted_By", "Deleted_At"])
+    archive_header = archive.row_values(1)
+    values.update({"Deleted_By": user["name"], "Deleted_At": now})
+    archive.append_row([values.get(c, "") for c in archive_header], value_input_option="RAW")
+
+    ws.delete_rows(row_number)
+    append_edit_log(user, _norm_no(values.get("No.")), "Deleted Activity", values.get("Activity", ""), "—")
+    clear_activity_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -262,10 +307,13 @@ def append_user_row(values: dict):
 # Logs
 # ---------------------------------------------------------------------------
 
-def append_edit_log(user: dict, row_number: int, column_name: str, old_value, new_value):
+def append_edit_log(user: dict, activity_no, column_name: str, old_value, new_value):
+    """One row per change, under the tab's columns Timestamp, Email, Name,
+    Activity_No, Column_Changed, Old_Value, New_Value. Activity_No is the
+    activity's own No. (stable), never its sheet row number (shifts on delete)."""
     now = now_jordan().strftime("%Y-%m-%d %H:%M:%S")
     _ws(EDIT_LOG_SHEET).append_row(
-        [now, user["email"], user["name"], row_number, column_name, str(old_value), str(new_value)],
+        [now, user["email"], user["name"], activity_no, column_name, str(old_value), str(new_value)],
         value_input_option="USER_ENTERED",
     )
 

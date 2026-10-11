@@ -1,32 +1,30 @@
 import streamlit as st
 
-from utils.auth import current_user, is_admin
+from utils.auth import current_user
 from utils.style import status_badge_html
 from utils.sheets import load_activities, update_activity_cell, ConflictError
 from utils.compute import enrich
+from utils.activity_editor import (can_edit, core_inputs, save_core_changes, delete_control,
+                                   wp_options, team_options)
 
 st.title("Critical Follow-up")
-st.caption("Direct edits write straight to Google Sheets — each member can edit only their own activities; "
-           "admins can edit everything. Status here is computed automatically from the Done flag and the "
-           "start/end dates — it's never picked from a dropdown.")
+st.caption("Direct edits write straight to Google Sheets — each member can edit or delete only their own "
+           "activities; admins can edit everything. Status here is computed automatically from the Done "
+           "flag and the start/end dates — it's never picked from a dropdown.")
 
 user = current_user()
 df = enrich(load_activities())
 if df.empty:
     st.stop()
 
+wps = wp_options(df)
+team_names = team_options(df)
+
 ACTION_OPTIONS = [
     "— Select an action —", "Confirmed — keep as is", "Update status / date", "Reassign owner",
     "Escalate recruitment", "Follow up with external party (MODEE/GIZ/MoL)", "Re-prioritize / reduce scope",
     "Mark as not applicable", "Needs further discussion",
 ]
-
-
-def can_edit(row) -> bool:
-    if is_admin():
-        return True
-    owner = str(row.get("Responsible (Name)", "")).lower()
-    return user["name"].lower() in owner
 
 
 def render_tab(sub, key_prefix):
@@ -52,32 +50,31 @@ def render_tab(sub, key_prefix):
                     st.warning("At risk")
 
             k = f"{key_prefix}_{row_number}"
-            current_team_update = str(row.get("Team Update", "") or "").strip()
-            done_col, note_col, action_col = st.columns([1, 1.7, 1.3])
-            done_checked = done_col.checkbox(
-                "Done ✅", value=current_team_update.lower() == "done",
-                key=f"done_{k}", disabled=not editable,
-            )
+            new_values = core_inputs(row, k, wps, team_names, editable)
+            note_col, action_col = st.columns([1.7, 1.3])
             note = note_col.text_area("Team note", value=str(row.get("Team_Notes", "") or ""),
                                        key=f"note_{k}", disabled=not editable, height=68)
             action = action_col.selectbox("Agreed action", ACTION_OPTIONS,
                                            index=0, key=f"action_{k}", disabled=not editable)
 
-            if editable and st.button("💾 Save", key=f"save_{k}", use_container_width=True):
+            if not editable:
+                st.caption("🔒 Read-only — this activity isn't assigned to you")
+                continue
+
+            save_col, delete_col = st.columns([3, 1])
+            if save_col.button("💾 Save", key=f"save_{k}", use_container_width=True):
                 try:
-                    new_team_update = "Done" if done_checked else ""
-                    if new_team_update != current_team_update and "Team Update" in df.columns:
-                        update_activity_cell(row_number, "Team Update", new_team_update, user)
+                    save_core_changes(row, new_values, user)
                     if note != str(row.get("Team_Notes", "") or ""):
-                        update_activity_cell(row_number, "Team_Notes", note, user)
+                        update_activity_cell(row, "Team_Notes", note, user)
                     if action != "— Select an action —":
-                        update_activity_cell(row_number, "Agreed_Action", action, user)
+                        update_activity_cell(row, "Agreed_Action", action, user)
                     st.success("Saved ✅")
                     st.rerun()
                 except ConflictError as e:
                     st.error(str(e))
-            elif not editable:
-                st.caption("🔒 Read-only — this activity isn't assigned to you")
+            with delete_col:
+                delete_control(row, k, user)
 
 
 tabs = st.tabs(["🔴 Delayed", "🟠 At risk", "⚪ No owner", "🟡 Needs confirmation"])

@@ -7,6 +7,7 @@ from utils.sheets import load_activities
 from utils.compute import enrich, kpis
 from utils.constants import PROJECT_NAME, PROJECT_END_DATE, INTERNAL_DEADLINE, now_jordan
 from utils.overview_pdf import build_overview_report_pdf
+from utils.activity_editor import activity_picker, wp_options, team_options
 
 # Page setup (config, styling, login) all happens once in streamlit_app.py,
 # the router, before this page is ever dispatched to — nothing to repeat here.
@@ -206,7 +207,11 @@ t1, t2, t3 = st.tabs([
 ])
 
 
-def _mini_table(sub: pd.DataFrame, extra_col: str | None = None):
+wps = wp_options(df)
+team_names = team_options(df)
+
+
+def _mini_table(sub: pd.DataFrame, key: str, extra_col: str | None = None):
     if sub.empty:
         st.success("Nothing here 🎉")
         return
@@ -214,15 +219,16 @@ def _mini_table(sub: pd.DataFrame, extra_col: str | None = None):
     if extra_col and extra_col in sub.columns:
         cols.append(extra_col)
     st.dataframe(sub[cols], use_container_width=True, hide_index=True)
+    activity_picker(sub, key, wps, team_names)
 
 
 with t1:
     st.caption(f"Activities due between today ({today.date()}) and {week_ahead.date()}, not yet completed.")
-    _mini_table(this_week)
+    _mini_table(this_week, "ov_week")
 with t2:
-    _mini_table(delayed_df, "days_overdue")
+    _mini_table(delayed_df, "ov_delayed", "days_overdue")
 with t3:
-    _mini_table(at_risk_df)
+    _mini_table(at_risk_df, "ov_risk")
 
 st.divider()
 

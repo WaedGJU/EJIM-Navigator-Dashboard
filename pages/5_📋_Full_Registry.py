@@ -2,6 +2,7 @@ import streamlit as st
 
 from utils.sheets import load_activities
 from utils.compute import enrich
+from utils.activity_editor import activity_picker, wp_options, team_options
 
 st.title("Full Activity Registry")
 
@@ -32,6 +33,7 @@ st.dataframe(
           "is_overdue", "is_atrisk", "is_unassigned"]],
     use_container_width=True, hide_index=True,
 )
+activity_picker(view, "registry", wp_options(df), team_options(df))
 
 st.download_button(
     "⬇ Export filtered view as CSV",

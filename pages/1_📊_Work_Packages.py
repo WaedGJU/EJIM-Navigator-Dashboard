@@ -1,23 +1,23 @@
-import pandas as pd
 import streamlit as st
 import plotly.express as px
 
-from utils.auth import current_user, is_admin
 from utils.style import COLORS, status_badge_html
-from utils.sheets import load_activities, update_activity_cell, ConflictError
+from utils.sheets import load_activities
 from utils.compute import enrich
+from utils.activity_editor import activity_editor, can_edit, wp_options, team_options
 
 st.title("Work Packages (WP1–WP9)")
 st.caption("Every work package as a progress card — open one to see its activities. "
-           "Admins can update an activity's due date right here; it's saved to Google Sheets instantly. "
+           "Admins can edit or delete any activity right here, and everyone else their own (work package, "
+           "owner, dates, Done); it's saved to Google Sheets instantly. "
            "Status is never picked manually — it's computed automatically from the Done flag and dates.")
-
-user = current_user()
-admin = is_admin()
 
 df = enrich(load_activities())
 if df.empty:
     st.stop()
+
+wps = wp_options(df)
+team_names = team_options(df)
 
 wp_list = sorted(df["Original WP"].dropna().unique())
 cols = st.columns(3)
@@ -65,35 +65,13 @@ for i, wp in enumerate(wp_list):
             fig.update_layout(height=220, margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
             st.plotly_chart(fig, use_container_width=True, key=f"wp_pie_{i}")
 
-            if not admin:
-                for _, row in sub.iterrows():
-                    c1, c2 = st.columns([3, 1])
-                    c1.markdown(f"**{row['Activity']}** — {row.get('Responsible (Name)', '—')}")
-                    c2.markdown(status_badge_html(row["AutoStatus"]), unsafe_allow_html=True)
-            else:
-                for row_number, row in sub.iterrows():
-                    with st.container(border=True):
-                        h1, h2 = st.columns([3, 1])
-                        h1.markdown(f"**{row['Activity']}**")
-                        h2.markdown(status_badge_html(row["AutoStatus"]), unsafe_allow_html=True)
-                        st.caption(f"Owner: {row.get('Responsible (Name)', '—')}")
-
-                        k = f"wp_{row_number}"
-                        due_col, save_col = st.columns([1.6, 0.8])
-                        current_end = str(row.get("End Date", "") or "").strip()
-                        try:
-                            end_default = pd.to_datetime(current_end).date() if current_end else None
-                        except Exception:
-                            end_default = None
-                        new_end = due_col.date_input("Due date", value=end_default, key=f"end_{k}")
-
-                        with save_col:
-                            st.write("")  # vertical spacer so the button lines up with the input
-                            if st.button("💾 Save", key=f"save_{k}", use_container_width=True):
-                                try:
-                                    if new_end and new_end.isoformat() != current_end:
-                                        update_activity_cell(row_number, "End Date", new_end.isoformat(), user)
-                                    st.success("Saved ✅")
-                                    st.rerun()
-                                except ConflictError as e:
-                                    st.error(str(e))
+            for row_number, row in sub.iterrows():
+                with st.container(border=True):
+                    h1, h2 = st.columns([3, 1])
+                    h1.markdown(f"**{row['Activity']}**")
+                    h2.markdown(status_badge_html(row["AutoStatus"]), unsafe_allow_html=True)
+                    if can_edit(row):
+                        activity_editor(row, f"wp_{row_number}", wps, team_names)
+                    else:
+                        st.caption(f"Owner: {row.get('Responsible (Name)', '—')} · "
+                                   f"Start: {row.get('Start Date', '—')} · End: {row.get('End Date', '—')}")

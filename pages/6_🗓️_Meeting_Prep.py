@@ -2,10 +2,12 @@ import datetime
 import pandas as pd
 import streamlit as st
 
-from utils.auth import current_user, is_admin
+from utils.auth import current_user
 from utils.style import COLORS, status_badge_html
-from utils.sheets import load_activities, load_users, update_activity_cell, ConflictError
+from utils.sheets import load_activities, update_activity_cell, ConflictError
 from utils.compute import enrich
+from utils.activity_editor import (can_edit, core_inputs, save_core_changes, delete_control,
+                                   wp_options, team_options)
 from utils.constants import PROJECT_NAME, now_jordan
 from utils.meeting_pdf import build_meeting_minutes_pdf
 
@@ -14,6 +16,7 @@ FIXED_ATTENDANCE_ROSTER = ["Ziad", "Feras", "Waed", "Omar", "Heba", "Karma", "Ra
 MEETING_WEEKDAYS = {6: "Sunday", 1: "Tuesday"}  # Python: Monday=0 ... Sunday=6
 
 FIELD_LABELS = {
+    "Original WP": "Work package",
     "Responsible (Name)": "Owner",
     "Start Date": "Start date",
     "End Date": "End date",
@@ -32,16 +35,6 @@ def next_meetings(n=2):
             found.append((d, MEETING_WEEKDAYS[d.weekday()]))
         d += datetime.timedelta(days=1)
     return found
-
-
-def _parse_date(value):
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        return pd.to_datetime(text).date()
-    except Exception:
-        return None
 
 
 def record_change(activity: str, wp: str, field: str, old_value, new_value):
@@ -124,13 +117,8 @@ df = enrich(load_activities())
 if df.empty:
     st.stop()
 
-users_df = load_users()
-team_names = [n for n in users_df["Name"].dropna().astype(str).str.strip().tolist() if n] \
-    if not users_df.empty and "Name" in users_df.columns else []
-people_in_registry = sorted(df["Responsible (Name)"].dropna().astype(str).str.strip().unique())
-for p in people_in_registry:
-    if p and p not in team_names:
-        team_names.append(p)
+wps = wp_options(df)
+team_names = team_options(df)
 
 agenda = df[df["is_overdue"] | df["is_atrisk"] | df["is_unassigned"] | df["is_needs_confirmation"]]
 
@@ -188,13 +176,6 @@ ACTION_OPTIONS = [
 ]
 
 
-def can_edit(row) -> bool:
-    if is_admin():
-        return True
-    owner = str(row.get("Responsible (Name)", "")).lower()
-    return user["name"].lower() in owner
-
-
 st.subheader("Agenda")
 tab_labels = ["🔴 Delayed", "🟠 At risk", "⚪ No owner", "🟡 Needs confirmation"]
 tabs = st.tabs(tab_labels)
@@ -220,66 +201,42 @@ for tab, sub, prefix in zip(tabs, subsets, ["mp_delayed", "mp_risk", "mp_unassig
                 h2.markdown(status_badge_html(row["AutoStatus"]), unsafe_allow_html=True)
 
                 k = f"{prefix}_{row_number}"
-                current_owner = str(row.get("Responsible (Name)", "")).strip()
-                owner_options = team_names if current_owner in team_names else [current_owner] + team_names
-
-                owner_col, done_col = st.columns([2, 1])
-                new_owner = owner_col.selectbox(
-                    "Owner", owner_options,
-                    index=owner_options.index(current_owner) if current_owner in owner_options else 0,
-                    key=f"owner_{k}", disabled=not editable,
-                )
-                current_team_update = str(row.get("Team Update", "") or "").strip()
-                done_checked = done_col.checkbox(
-                    "Done ✅", value=current_team_update.lower() == "done",
-                    key=f"done_{k}", disabled=not editable,
-                )
-
-                start_col, end_col = st.columns(2)
-                current_start = str(row.get("Start Date", "") or "").strip()
-                current_end = str(row.get("End Date", "") or "").strip()
-                new_start = start_col.date_input("Start date", value=_parse_date(current_start),
-                                                  key=f"start_{k}", disabled=not editable)
-                new_end = end_col.date_input("End date", value=_parse_date(current_end),
-                                              key=f"end_{k}", disabled=not editable)
+                new_values = core_inputs(row, k, wps, team_names, editable)
 
                 nc, ac = st.columns([2, 1.3])
                 note = nc.text_area("Note for this meeting", value=str(row.get("Team_Notes", "") or ""),
                                      key=f"note_{k}", disabled=not editable, height=64)
                 action = ac.selectbox("Agreed action", ACTION_OPTIONS, key=f"action_{k}", disabled=not editable)
 
-                if editable and st.button("💾 Save", key=f"save_{k}"):
+                if not editable:
+                    st.caption("🔒 Read-only — this activity isn't assigned to you")
+                    continue
+
+                save_col, delete_col = st.columns([3, 1])
+                with delete_col:
+                    delete_control(
+                        row, k, user,
+                        on_delete=lambda r=row: record_change(r["Activity"], r["Original WP"],
+                                                              "Activity", "—", "Deleted"),
+                    )
+                if save_col.button("💾 Save", key=f"save_{k}", use_container_width=True):
                     try:
-                        if new_owner != current_owner:
-                            update_activity_cell(row_number, "Responsible (Name)", new_owner, user)
-                            record_change(row["Activity"], row["Original WP"], "Responsible (Name)",
-                                          current_owner, new_owner)
-                        new_team_update = "Done" if done_checked else ""
-                        if new_team_update != current_team_update and "Team Update" in df.columns:
-                            update_activity_cell(row_number, "Team Update", new_team_update, user)
-                            record_change(row["Activity"], row["Original WP"], "Team Update",
-                                          current_team_update or "—", new_team_update or "—")
-                        if new_start and new_start.isoformat() != current_start:
-                            update_activity_cell(row_number, "Start Date", new_start.isoformat(), user)
-                            record_change(row["Activity"], row["Original WP"], "Start Date",
-                                          current_start, new_start.isoformat())
-                        if new_end and new_end.isoformat() != current_end:
-                            update_activity_cell(row_number, "End Date", new_end.isoformat(), user)
-                            record_change(row["Activity"], row["Original WP"], "End Date",
-                                          current_end, new_end.isoformat())
+                        save_core_changes(
+                            row, new_values, user,
+                            on_change=lambda col, old, new, r=row: record_change(
+                                r["Activity"], r["Original WP"], col, old, new),
+                        )
                         if note != str(row.get("Team_Notes", "") or ""):
-                            update_activity_cell(row_number, "Team_Notes", note, user)
+                            update_activity_cell(row, "Team_Notes", note, user)
                             record_change(row["Activity"], row["Original WP"], "Team_Notes",
                                           str(row.get("Team_Notes", "") or "—"), note or "—")
                         if action != "— Select an action —":
-                            update_activity_cell(row_number, "Agreed_Action", action, user)
+                            update_activity_cell(row, "Agreed_Action", action, user)
                             record_change(row["Activity"], row["Original WP"], "Agreed_Action", "—", action)
                         st.success("Saved ✅")
                         st.rerun()
                     except ConflictError as e:
                         st.error(str(e))
-                elif not editable:
-                    st.caption("🔒 Read-only — this activity isn't assigned to you")
 
 st.divider()
 

@@ -4,6 +4,7 @@ import plotly.express as px
 from utils.style import COLORS
 from utils.sheets import load_activities
 from utils.compute import enrich
+from utils.activity_editor import activity_picker, wp_options, team_options
 
 st.title("MODEE / GIZ / MoL")
 st.caption("Every activity naming an external partner as an owner, co-owner, or dependency.")
@@ -49,3 +50,4 @@ st.dataframe(
     external[["No.", "Original WP", "Activity", "Responsible (Name)", "Status", "End Date"]],
     use_container_width=True, hide_index=True,
 )
+activity_picker(external, "partners", wp_options(df), team_options(df))
