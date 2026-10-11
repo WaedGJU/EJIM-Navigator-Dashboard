@@ -3,7 +3,7 @@ import streamlit as st
 from utils.style import COLORS, status_badge_html
 from utils.sheets import load_activities
 from utils.compute import enrich
-from utils.activity_editor import activity_editor, wp_options, team_options
+from utils.activity_editor import activity_editor, activity_key, wp_options, team_options
 
 st.title("Team")
 st.caption("Progress per person. Admins can edit or delete any activity; everyone else can edit or "
@@ -46,7 +46,7 @@ for person in people:
     )
 
     with st.expander("✏️ Update activities"):
-        for row_number, row in sub.iterrows():
+        for _, row in sub.iterrows():
             with st.container(border=True):
                 c1, c2 = st.columns([2, 1])
                 with c1:
@@ -59,5 +59,5 @@ for person in people:
                     elif row.get("is_atrisk"):
                         st.warning("At risk")
 
-                activity_editor(row, f"team_{row_number}", wps, team_names)
+                activity_editor(row, activity_key("team", row), wps, team_names)
     st.divider()

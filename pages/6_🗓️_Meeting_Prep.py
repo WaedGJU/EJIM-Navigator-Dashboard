@@ -6,7 +6,7 @@ from utils.auth import current_user
 from utils.style import COLORS, status_badge_html
 from utils.sheets import load_activities, update_activity_cell, ConflictError
 from utils.compute import enrich
-from utils.activity_editor import (can_edit, core_inputs, save_core_changes, delete_control,
+from utils.activity_editor import (activity_key, can_edit, core_inputs, save_core_changes, delete_control,
                                    wp_options, team_options)
 from utils.constants import PROJECT_NAME, now_jordan
 from utils.meeting_pdf import build_meeting_minutes_pdf
@@ -191,7 +191,7 @@ for tab, sub, prefix in zip(tabs, subsets, ["mp_delayed", "mp_risk", "mp_unassig
         if sub.empty:
             st.success("Nothing here 🎉")
             continue
-        for row_number, row in sub.iterrows():
+        for _, row in sub.iterrows():
             editable = can_edit(row)
             with st.container(border=True):
                 h1, h2 = st.columns([3, 1])
@@ -200,8 +200,12 @@ for tab, sub, prefix in zip(tabs, subsets, ["mp_delayed", "mp_risk", "mp_unassig
                             unsafe_allow_html=True)
                 h2.markdown(status_badge_html(row["AutoStatus"]), unsafe_allow_html=True)
 
-                k = f"{prefix}_{row_number}"
-                new_values = core_inputs(row, k, wps, team_names, editable)
+                k = activity_key(prefix, row)
+                new_values = core_inputs(
+                    row, k, wps, team_names, editable,
+                    on_change=lambda col, old, new, r=row: record_change(
+                        r["Activity"], r["Original WP"], col, old, new),
+                )
 
                 nc, ac = st.columns([2, 1.3])
                 note = nc.text_area("Note for this meeting", value=str(row.get("Team_Notes", "") or ""),

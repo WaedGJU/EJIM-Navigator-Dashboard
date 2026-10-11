@@ -4,7 +4,7 @@ import plotly.express as px
 from utils.style import COLORS, status_badge_html
 from utils.sheets import load_activities
 from utils.compute import enrich
-from utils.activity_editor import activity_editor, can_edit, wp_options, team_options
+from utils.activity_editor import activity_editor, activity_key, can_edit, wp_options, team_options
 
 st.title("Work Packages (WP1–WP9)")
 st.caption("Every work package as a progress card — open one to see its activities. "
@@ -65,13 +65,13 @@ for i, wp in enumerate(wp_list):
             fig.update_layout(height=220, margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
             st.plotly_chart(fig, use_container_width=True, key=f"wp_pie_{i}")
 
-            for row_number, row in sub.iterrows():
+            for _, row in sub.iterrows():
                 with st.container(border=True):
                     h1, h2 = st.columns([3, 1])
                     h1.markdown(f"**{row['Activity']}**")
                     h2.markdown(status_badge_html(row["AutoStatus"]), unsafe_allow_html=True)
                     if can_edit(row):
-                        activity_editor(row, f"wp_{row_number}", wps, team_names)
+                        activity_editor(row, activity_key("wp", row), wps, team_names)
                     else:
                         st.caption(f"Owner: {row.get('Responsible (Name)', '—')} · "
                                    f"Start: {row.get('Start Date', '—')} · End: {row.get('End Date', '—')}")

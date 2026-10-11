@@ -15,10 +15,9 @@ import streamlit as st
 from utils.auth import current_user, is_admin
 from utils.sheets import load_users, update_activity_cell, delete_activity, ConflictError
 
-# Written in this order on save. Dates go before the Done flag on purpose:
-# unticking Done falls back to a status based on the start date, so the new
-# start date has to be in the sheet first.
-CORE_FIELDS = ["Original WP", "Responsible (Name)", "Start Date", "End Date", "Team Update"]
+# Saved by the Save button. The Done flag isn't here: it saves itself the
+# moment it's clicked (see _save_done_now).
+CORE_FIELDS = ["Original WP", "Responsible (Name)", "Start Date", "End Date"]
 
 
 def can_edit(row) -> bool:
@@ -60,8 +59,45 @@ def _with_current(options: list, current: str) -> list:
     return options if current in options else [current] + options
 
 
-def core_inputs(row, k: str, wps: list, team_names: list, editable: bool) -> dict:
-    """Draws the shared fields and returns {column: new value} for each one."""
+def activity_key(prefix: str, row) -> str:
+    """Widget key for one activity, built from its No. — never from its sheet
+    row number. Streamlit keeps a widget's value by key, so a row-number key
+    would hand one activity's unsaved ticks to whichever activity slides into
+    that row after a delete."""
+    return f"{prefix}_{str(row.get('No.', '')).strip()}"
+
+
+def _sync_widget(key: str, current):
+    """Streamlit remembers a widget's value by key and ignores later defaults,
+    so a box could keep showing an old value after the sheet changed. Reset
+    it to the sheet's value whenever that value changes; an unsaved edit the
+    user is making stays as long as the sheet hasn't moved underneath it."""
+    base = f"_sheet_value_{key}"
+    if base not in st.session_state or st.session_state[base] != current:
+        st.session_state[key] = current
+        st.session_state[base] = current
+
+
+def _save_done_now(row, k: str, on_change=None):
+    """Runs the moment the Done box is ticked/unticked, so Done never sits on
+    screen unsaved while the status still says otherwise."""
+    user = current_user()
+    new = "Done" if st.session_state[f"done_{k}"] else ""
+    old = str(row.get("Team Update", "") or "").strip()
+    try:
+        update_activity_cell(row, "Team Update", new, user)
+        if on_change:
+            on_change("Team Update", old or "—", new or "—")
+        st.toast("Marked Done ✅ — status set to Completed" if new else "Done removed")
+    except ConflictError as e:
+        st.session_state[f"done_{k}"] = not st.session_state[f"done_{k}"]
+        st.toast(f"⚠️ {e}")
+
+
+def core_inputs(row, k: str, wps: list, team_names: list, editable: bool, on_change=None) -> dict:
+    """Draws the shared fields and returns {column: new value} for each one.
+    The Done box saves on its own as soon as it's clicked; the other fields
+    are saved with the Save button."""
     current_wp = str(row.get("Original WP", "") or "").strip()
     current_owner = str(row.get("Responsible (Name)", "") or "").strip()
     current_done = str(row.get("Team Update", "") or "").strip().lower() == "done"
@@ -69,27 +105,30 @@ def core_inputs(row, k: str, wps: list, team_names: list, editable: bool) -> dic
     wp_opts = _with_current(wps, current_wp)
     owner_opts = _with_current(team_names, current_owner)
 
+    _sync_widget(f"wp_{k}", current_wp)
+    _sync_widget(f"owner_{k}", current_owner)
+    _sync_widget(f"done_{k}", current_done)
+    _sync_widget(f"start_{k}", _parse_date(row.get("Start Date")))
+    _sync_widget(f"end_{k}", _parse_date(row.get("End Date")))
+
     wp_col, owner_col, done_col = st.columns([2, 1.6, 0.8])
-    new_wp = wp_col.selectbox("Work package", wp_opts, index=wp_opts.index(current_wp),
-                              key=f"wp_{k}", disabled=not editable)
-    new_owner = owner_col.selectbox("Owner", owner_opts, index=owner_opts.index(current_owner),
-                                    key=f"owner_{k}", disabled=not editable)
+    new_wp = wp_col.selectbox("Work package", wp_opts, key=f"wp_{k}", disabled=not editable)
+    new_owner = owner_col.selectbox("Owner", owner_opts, key=f"owner_{k}", disabled=not editable)
     with done_col:
         st.write("")  # lines the checkbox up with the inputs beside it
-        done_checked = st.checkbox("Done ✅", value=current_done, key=f"done_{k}", disabled=not editable)
+        st.checkbox("Done ✅", key=f"done_{k}", disabled=not editable,
+                    on_change=_save_done_now, args=(row, k, on_change),
+                    help="Saved instantly — marks the activity Completed.")
 
     start_col, end_col = st.columns(2)
-    new_start = start_col.date_input("Start date", value=_parse_date(row.get("Start Date")),
-                                     key=f"start_{k}", disabled=not editable)
-    new_end = end_col.date_input("End date", value=_parse_date(row.get("End Date")),
-                                 key=f"end_{k}", disabled=not editable)
+    new_start = start_col.date_input("Start date", key=f"start_{k}", disabled=not editable)
+    new_end = end_col.date_input("End date", key=f"end_{k}", disabled=not editable)
 
     return {
         "Original WP": new_wp,
         "Responsible (Name)": new_owner,
         "Start Date": new_start.isoformat() if new_start else str(row.get("Start Date", "") or "").strip(),
         "End Date": new_end.isoformat() if new_end else str(row.get("End Date", "") or "").strip(),
-        "Team Update": "Done" if done_checked else "",
     }
 
 
@@ -164,4 +203,5 @@ def activity_picker(view: pd.DataFrame, k: str, wps: list, team_names: list):
         picked = st.selectbox("Activity", list(labels), format_func=labels.get,
                               index=None, placeholder="Choose an activity…", key=f"pick_{k}")
         if picked is not None:
-            activity_editor(view.loc[picked], f"{k}_{picked}", wps, team_names)
+            row = view.loc[picked]
+            activity_editor(row, activity_key(k, row), wps, team_names)

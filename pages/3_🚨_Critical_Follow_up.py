@@ -4,7 +4,7 @@ from utils.auth import current_user
 from utils.style import status_badge_html
 from utils.sheets import load_activities, update_activity_cell, ConflictError
 from utils.compute import enrich
-from utils.activity_editor import (can_edit, core_inputs, save_core_changes, delete_control,
+from utils.activity_editor import (activity_key, can_edit, core_inputs, save_core_changes, delete_control,
                                    wp_options, team_options)
 
 st.title("Critical Follow-up")
@@ -32,7 +32,7 @@ def render_tab(sub, key_prefix):
         st.success("Nothing in this category right now 🎉")
         return
 
-    for row_number, row in sub.iterrows():
+    for _, row in sub.iterrows():
         editable = can_edit(row)
         with st.container(border=True):
             c1, c2 = st.columns([2, 1])
@@ -49,7 +49,7 @@ def render_tab(sub, key_prefix):
                 elif row.get("is_atrisk"):
                     st.warning("At risk")
 
-            k = f"{key_prefix}_{row_number}"
+            k = activity_key(key_prefix, row)
             new_values = core_inputs(row, k, wps, team_names, editable)
             note_col, action_col = st.columns([1.7, 1.3])
             note = note_col.text_area("Team note", value=str(row.get("Team_Notes", "") or ""),
