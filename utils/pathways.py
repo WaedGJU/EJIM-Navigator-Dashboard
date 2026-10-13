@@ -1,12 +1,13 @@
 """
-Where each of the six MASAR pathways stands in its 9-step content workflow.
+Step-by-step progress for the MASAR content: the six pathways and the two
+sets of chatbot questions. Each step is one activity in the registry; a
+bar shows which steps are done and which one the work is on now.
 
-Every pathway goes through the same steps, and each step is one activity in
-the registry whose name holds the pathway's name in quotes, e.g.
-"Translate 'Study in Germany' pathway content to Arabic". Activities are
-matched to a pathway + step by those names, so nothing extra has to be
-filled in on the sheet. An activity that's renamed so it no longer matches
-simply drops out of the bar (the step then shows as missing).
+Pathway steps are matched by activity name (the pathway's name in quotes
+plus the step's wording), e.g. "Translate 'Study in Germany' pathway content
+to Arabic". Chatbot steps are listed by activity No., since their names
+don't follow one pattern. Either way, an activity that can't be found shows
+as a dashed "missing" step instead of breaking the bar.
 """
 
 import re
@@ -28,11 +29,31 @@ STEPS = [
     ("Upload English", "Rania", re.compile(r"^Upload '.+' pathway content .*\(English\)", re.I)),
     ("Translate to Arabic", "Waed", re.compile(r"^Translate '.+' pathway content", re.I)),
     ("Upload Arabic", "Maryam", re.compile(r"^Upload '.+' pathway content .*\(Arabic\)", re.I)),
-    ("Initial review with GIZ", "Karma", re.compile(r"^Initial review of '.+' pathway", re.I)),
-    ("Findings to Maryam & Rania", "Karma", re.compile(r"^Deliver GIZ initial-review findings on '.+'", re.I)),
-    ("Apply comments on CMS", "Maryam / Rania", re.compile(r"^Apply GIZ initial-review comments on '.+'", re.I)),
-    ("Final review with GIZ", "Karma", re.compile(r"^Final review of '.+' pathway", re.I)),
-    ("Final Excel to QA", "Karma", re.compile(r"^Hand over final Excel content file of '.+'", re.I)),
+]
+
+# The five GIZ review steps, shared by both chatbot sets.
+_GIZ_REVIEW = [
+    "Initial review with GIZ",
+    "Findings to Maryam & Rania",
+    "Apply comments on CMS",
+    "Final review with GIZ",
+    "Final Excel to QA",
+]
+
+# (bar title, [(step label, activity No.), ...]) in workflow order.
+CHATBOT_SETS = [
+    ("Chatbot questions: first set", [
+        ("Build & send questions", "201"),
+        ("Upload Arabic", "199"),
+        ("Upload English", "200"),
+        *zip(_GIZ_REVIEW, ["238", "239", "240", "241", "242"]),
+    ]),
+    ("Chatbot questions: second set", [
+        ("Build & send questions", "202"),
+        ("Upload English", "204"),
+        ("Upload Arabic", "205"),
+        *zip(_GIZ_REVIEW, ["243", "244", "245", "246", "247"]),
+    ]),
 ]
 
 _QUOTED = re.compile(r"'([^']+)'")
@@ -50,43 +71,63 @@ def _step_of(activity: str):
     return next((i for i, (_, _, rx) in enumerate(STEPS) if rx.search(activity or "")), None)
 
 
-def pathway_progress(df: pd.DataFrame) -> list:
-    """One dict per pathway, in PATHWAYS order:
-      steps   — list of 9 dicts {label, owner, state, activity}; state is
-                'done', 'current', 'todo' or 'missing' (no matching activity)
+def _no(value) -> str:
+    text = str(value if value is not None else "").strip()
+    return text[:-2] if text.endswith(".0") else text
+
+
+def _progress(name: str, steps: list) -> dict:
+    """`steps` is [(label, owner, row or None), ...] in workflow order. Returns
+      name, total, done
+      steps   — [{label, owner, state, activity}]; state is 'done', 'current',
+                'todo' or 'missing' (no matching activity in the registry)
       current — index of the first step that isn't done (None when all done)
-      done    — number of steps completed
       overdue — True if the current step's end date has passed
       due     — the current step's end date text ('' if none)
-    `df` must already be enriched (needs Bucket / is_overdue)."""
+    Rows must come from an enriched frame (needs Bucket / is_overdue)."""
+    out, current = [], None
+    for label, owner, row in steps:
+        if row is None:
+            state = "missing"
+        elif row["Bucket"] == "Completed":
+            state = "done"
+        elif current is None:
+            state, current = "current", len(out)
+        else:
+            state = "todo"
+        if row is not None:
+            owner = str(row.get("Responsible (Name)", "") or "").strip() or owner
+        out.append({"label": label, "owner": owner, "state": state, "activity": row})
+
+    cur_row = out[current]["activity"] if current is not None else None
+    return {
+        "name": name,
+        "total": len(out),
+        "done": sum(s["state"] == "done" for s in out),
+        "steps": out,
+        "current": current,
+        "overdue": bool(cur_row is not None and cur_row.get("is_overdue")),
+        "due": str(cur_row.get("End Date", "") or "") if cur_row is not None else "",
+    }
+
+
+def pathway_progress(df: pd.DataFrame) -> list:
+    """One progress dict (see _progress) per pathway, in PATHWAYS order."""
     found = {}
     for _, row in df.iterrows():
         p, s = _pathway_of(row.get("Activity")), _step_of(row.get("Activity"))
         if p is not None and s is not None:
             found[(p, s)] = row
+    return [
+        _progress(p, [(label, owner, found.get((p, i))) for i, (label, owner, _) in enumerate(STEPS)])
+        for p in PATHWAYS
+    ]
 
-    result = []
-    for p in PATHWAYS:
-        steps, current = [], None
-        for i, (label, owner, _) in enumerate(STEPS):
-            row = found.get((p, i))
-            if row is None:
-                state = "missing"
-            elif row["Bucket"] == "Completed":
-                state = "done"
-            elif current is None:
-                state, current = "current", i
-            else:
-                state = "todo"
-            steps.append({"label": label, "owner": owner, "state": state, "activity": row})
 
-        cur_row = steps[current]["activity"] if current is not None else None
-        result.append({
-            "pathway": p,
-            "steps": steps,
-            "current": current,
-            "done": sum(s["state"] == "done" for s in steps),
-            "overdue": bool(cur_row is not None and cur_row.get("is_overdue")),
-            "due": str(cur_row.get("End Date", "") or "") if cur_row is not None else "",
-        })
-    return result
+def chatbot_progress(df: pd.DataFrame) -> list:
+    """One progress dict (see _progress) per chatbot question set."""
+    by_no = {_no(row.get("No.")): row for _, row in df.iterrows()}
+    return [
+        _progress(title, [(label, "", by_no.get(no)) for label, no in steps])
+        for title, steps in CHATBOT_SETS
+    ]
