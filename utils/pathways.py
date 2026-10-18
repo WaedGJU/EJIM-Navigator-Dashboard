@@ -43,11 +43,10 @@ CHATBOT_STEPS = [
     ("Final check", "Karma"),
 ]
 
-# (bar title, activity No. of each CHATBOT_STEPS step). None means no activity
-# exists for that step yet, so it shows as "missing" until one is added here.
+# (bar title, activity No. of each CHATBOT_STEPS step, in order)
 CHATBOT_SETS = [
-    ("Chatbot questions: first set", ["201", "238", "239", None, "199", "200", None]),
-    ("Chatbot questions: second set", ["202", "243", "244", None, "205", "204", None]),
+    ("Chatbot questions: first set", ["201", "238", "239", "240", "199", "200", "242"]),
+    ("Chatbot questions: second set", ["202", "243", "244", "245", "205", "204", "247"]),
 ]
 
 _QUOTED = re.compile(r"'([^']+)'")
