@@ -31,29 +31,22 @@ STEPS = [
     ("Upload Arabic", "Maryam", re.compile(r"^Upload '.+' pathway content .*\(Arabic\)", re.I)),
 ]
 
-# The five GIZ review steps, shared by both chatbot sets.
-_GIZ_REVIEW = [
-    "Initial review with GIZ",
-    "Findings to Maryam & Rania",
-    "Apply comments on CMS",
-    "Final review with GIZ",
-    "Final Excel to QA",
+# The chatbot workflow, shared by both question sets:
+# (short label for the bar, owner shown in the legend)
+CHATBOT_STEPS = [
+    ("Prepare English questions", "Karma"),
+    ("GIZ review", "GIZ"),
+    ("Apply GIZ comments & send to Maryam and Rania", "Karma"),
+    ("Translate to Arabic & check links", "Waed"),
+    ("Upload Arabic", "Maryam"),
+    ("Upload English", "Rania"),
+    ("Final check", "Karma"),
 ]
 
-# (bar title, [(step label, activity No.), ...]) in workflow order.
+# (bar title, activity No. of each CHATBOT_STEPS step, in order)
 CHATBOT_SETS = [
-    ("Chatbot questions: first set", [
-        ("Build & send questions", "201"),
-        ("Upload Arabic", "199"),
-        ("Upload English", "200"),
-        *zip(_GIZ_REVIEW, ["238", "239", "240", "241", "242"]),
-    ]),
-    ("Chatbot questions: second set", [
-        ("Build & send questions", "202"),
-        ("Upload English", "204"),
-        ("Upload Arabic", "205"),
-        *zip(_GIZ_REVIEW, ["243", "244", "245", "246", "247"]),
-    ]),
+    ("Chatbot questions: first set", ["201", "238", "239", "240", "199", "200", "242"]),
+    ("Chatbot questions: second set", ["202", "243", "244", "245", "205", "204", "247"]),
 ]
 
 _QUOTED = re.compile(r"'([^']+)'")
@@ -128,6 +121,6 @@ def chatbot_progress(df: pd.DataFrame) -> list:
     """One progress dict (see _progress) per chatbot question set."""
     by_no = {_no(row.get("No.")): row for _, row in df.iterrows()}
     return [
-        _progress(title, [(label, "", by_no.get(no)) for label, no in steps])
-        for title, steps in CHATBOT_SETS
+        _progress(title, [(label, owner, by_no.get(no)) for (label, owner), no in zip(CHATBOT_STEPS, nos)])
+        for title, nos in CHATBOT_SETS
     ]
